@@ -55,7 +55,7 @@ import 'package:photos/ui/home/grant_permissions_widget.dart';
 import 'package:photos/ui/home/header_widget.dart';
 import 'package:photos/ui/home/home_bottom_nav_bar.dart';
 import 'package:photos/ui/home/home_gallery_widget.dart';
-import 'package:photos/ui/home/landing_page_widget.dart';
+// import 'package:photos/ui/home/landing_page_widget.dart';
 import "package:photos/ui/home/loading_photos_widget.dart";
 import 'package:photos/ui/home/start_backup_hook_widget.dart';
 import 'package:photos/ui/notification/update/change_log_page.dart';
@@ -648,10 +648,10 @@ class _HomeWidgetState extends State<HomeWidget> {
   }
 
   Widget _getBody(BuildContext context) {
-    if (!Configuration.instance.hasConfiguredAccount()) {
-      _closeDrawerIfOpen(context);
-      return const LandingPageWidget();
-    }
+    // if (!Configuration.instance.hasConfiguredAccount()) {
+    //   _closeDrawerIfOpen(context);
+    //   return const LandingPageWidget();
+    // }
     if (!permissionService.hasGrantedPermissions()) {
       entityService.syncEntities().then((_) {
         PersonService.instance.resetEmailToPartialPersonDataCache();
@@ -700,7 +700,7 @@ class _HomeWidgetState extends State<HomeWidget> {
               openDrawer: Scaffold.of(context).openDrawer,
               physics: const BouncingScrollPhysics(),
               children: [
-                _showShowBackupHook
+                _showShowBackupHook && isUserLoggedIn()
                     ? const StartBackupHookWidget(headerWidget: HeaderWidget())
                     : HomeGalleryWidget(
                         header: const HeaderWidget(),
@@ -871,5 +871,9 @@ class _HomeWidgetState extends State<HomeWidget> {
         );
       }
     }
+  }
+
+  bool isUserLoggedIn(){
+    return false;
   }
 }

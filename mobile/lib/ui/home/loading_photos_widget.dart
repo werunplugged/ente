@@ -8,7 +8,7 @@ import 'package:photos/events/local_import_progress.dart';
 import 'package:photos/events/sync_status_update_event.dart';
 import "package:photos/generated/l10n.dart";
 import "package:photos/service_locator.dart";
-import 'package:photos/ui/common/bottom_shadow.dart';
+// import 'package:photos/ui/common/bottom_shadow.dart';
 import "package:photos/ui/components/buttons/button_widget.dart";
 import "package:photos/ui/components/dialog_widget.dart";
 import "package:photos/ui/components/models/button_type.dart";
@@ -26,7 +26,7 @@ class LoadingPhotosWidget extends StatefulWidget {
 class _LoadingPhotosWidgetState extends State<LoadingPhotosWidget> {
   late StreamSubscription<SyncStatusUpdate> _firstImportEvent;
   StreamSubscription<LocalImportProgressEvent>? _importProgressEvent;
-  int _currentPage = 0;
+  // int _currentPage = 0;
   String? _loadingMessage;
   final PageController _pageController = PageController(
     initialPage: 0,
@@ -61,23 +61,23 @@ class _LoadingPhotosWidgetState extends State<LoadingPhotosWidget> {
       }
     });
 
-    _didYouKnowTimer =
-        Timer.periodic(const Duration(seconds: 5), (Timer timer) {
-      if (!mounted) {
-        return;
-      }
-      if (_currentPage < _messages.length - 1) {
-        _currentPage++;
-      } else {
-        _currentPage = 0;
-      }
-
-      _pageController.animateToPage(
-        _currentPage,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeIn,
-      );
-    });
+    // _didYouKnowTimer =
+    //     Timer.periodic(const Duration(seconds: 5), (Timer timer) {
+    //   if (!mounted) {
+    //     return;
+    //   }
+    //   if (_currentPage < _messages.length - 1) {
+    //     _currentPage++;
+    //   } else {
+    //     _currentPage = 0;
+    //   }
+    //
+    //   _pageController.animateToPage(
+    //     _currentPage,
+    //     duration: const Duration(milliseconds: 300),
+    //     curve: Curves.easeIn,
+    //   );
+    // });
   }
 
   @override
@@ -150,49 +150,49 @@ class _LoadingPhotosWidgetState extends State<LoadingPhotosWidget> {
                   ),
                 ),
                 const SizedBox(height: 54),
-                Column(
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.start,
-                      children: [
-                        Text(
-                          S.of(context).didYouKnow,
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleLarge!
-                              .copyWith(
-                                color: Theme.of(context).colorScheme.greenText,
-                              ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(
-                      height: 16,
-                    ),
-                    SizedBox(
-                      height: 175,
-                      child: Stack(
-                        children: [
-                          PageView.builder(
-                            scrollDirection: Axis.vertical,
-                            controller: _pageController,
-                            itemBuilder: (context, index) {
-                              return _getMessage(_messages[index]);
-                            },
-                            itemCount: _messages.length,
-                            physics: const NeverScrollableScrollPhysics(),
-                          ),
-                          const Positioned(
-                            bottom: 0,
-                            left: 0,
-                            right: 0,
-                            child: BottomShadowWidget(),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
+                // Column(
+                //   children: [
+                //     Row(
+                //       mainAxisAlignment: MainAxisAlignment.start,
+                //       children: [
+                //         Text(
+                //           S.of(context).didYouKnow,
+                //           style: Theme.of(context)
+                //               .textTheme
+                //               .titleLarge!
+                //               .copyWith(
+                //                 color: Theme.of(context).colorScheme.greenText,
+                //               ),
+                //         ),
+                //       ],
+                //     ),
+                //     const SizedBox(
+                //       height: 16,
+                //     ),
+                //     SizedBox(
+                //       height: 175,
+                //       child: Stack(
+                //         children: [
+                //           PageView.builder(
+                //             scrollDirection: Axis.vertical,
+                //             controller: _pageController,
+                //             itemBuilder: (context, index) {
+                //               return _getMessage(_messages[index]);
+                //             },
+                //             itemCount: _messages.length,
+                //             physics: const NeverScrollableScrollPhysics(),
+                //           ),
+                //           const Positioned(
+                //             bottom: 0,
+                //             left: 0,
+                //             right: 0,
+                //             child: BottomShadowWidget(),
+                //           ),
+                //         ],
+                //       ),
+                //     ),
+                //   ],
+                // ),
               ],
             ),
           ),

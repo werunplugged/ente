@@ -956,7 +956,8 @@ class FilesDB with SqlDbBase {
       'SELECT DISTINCT $columnLocalID FROM $filesTable '
       'WHERE $columnLocalID IS NOT NULL AND ($columnOwnerID IS NULL OR '
       '$columnOwnerID = ?)',
-      [ownerID],
+      // [ownerID],
+      [1],
     );
     final result = <String>{};
     for (final row in rows) {

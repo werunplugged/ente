@@ -31,7 +31,7 @@ import "package:photos/services/machine_learning/face_ml/person/person_service.d
 import 'package:photos/services/search_service.dart';
 import 'package:photos/services/sync/sync_service.dart';
 import 'package:photos/utils/file_uploader.dart';
-import "package:photos/utils/lock_screen_settings.dart";
+// import "package:photos/utils/lock_screen_settings.dart";
 import 'package:photos/utils/validator_util.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import "package:tuple/tuple.dart";
@@ -465,7 +465,8 @@ class Configuration {
   }
 
   int? getUserID() {
-    return _preferences.getInt(userIDKey);
+    // return _preferences.getInt(userIDKey);
+     return 1;
   }
 
   Future<void> setUserID(int userID) async {
@@ -590,9 +591,10 @@ class Configuration {
   }
 
   Future<bool> shouldShowLockScreen() async {
-    final bool isPin = await LockScreenSettings.instance.isPinSet();
-    final bool isPass = await LockScreenSettings.instance.isPasswordSet();
-    return isPin || isPass || shouldShowSystemLockScreen();
+    // final bool isPin = await LockScreenSettings.instance.isPinSet();
+    // final bool isPass = await LockScreenSettings.instance.isPasswordSet();
+    // return isPin || isPass || shouldShowSystemLockScreen();
+    return false;
   }
 
   bool shouldShowSystemLockScreen() {

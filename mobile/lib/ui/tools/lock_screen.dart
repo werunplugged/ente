@@ -329,7 +329,8 @@ class _LockScreenState extends State<LockScreen>
 
         await startLockTimer(remainingTime);
       }
-      _isShowingLockScreen = true;
+      // _isShowingLockScreen = true;
+      _isShowingLockScreen = false;
       final result = isTimerRunning
           ? false
           : await requestAuthentication(

@@ -97,8 +97,9 @@ Future<void> _runInForeground(AdaptiveThemeMode? savedThemeMode) async {
         builder: (args) =>
             EnteApp(_runBackgroundTask, _killBGTask, locale, savedThemeMode),
         lockScreen: const LockScreen(),
-        enabled: await Configuration.instance.shouldShowLockScreen() ||
-            localSettings.isOnGuestView(),
+        // enabled: await Configuration.instance.shouldShowLockScreen() ||
+        //     localSettings.isOnGuestView(),
+        enabled: false,
         locale: locale,
         lightTheme: lightThemeData,
         darkTheme: darkThemeData,

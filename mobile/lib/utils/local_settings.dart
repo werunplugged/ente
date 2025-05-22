@@ -142,7 +142,8 @@ class LocalSettings {
   }
 
   bool isOnGuestView() {
-    return _prefs.getBool(onGuestViewKey) ?? false;
+    // return _prefs.getBool(onGuestViewKey) ?? false;
+    return false;
   }
 
   Future<void> setConfiguredLinksInAppPermissions(bool value) async {
