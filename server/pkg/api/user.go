@@ -26,21 +26,37 @@ import (
 type UserHandler struct {
 	UserController      *user.UserController
 	EmergencyController *emergency.Controller
+	JWTValidator        *auth.JWTValidator
 }
 
 // SendOTT generates and sends an OTT to the provided email address
 func (h *UserHandler) SendOTT(c *gin.Context) {
+	// Validate JWT token
+	authToken := c.GetHeader("Authorization")
+	if authToken == "" {
+		handler.Error(c, stacktrace.Propagate(ente.NewBadRequestWithMessage("Authorization header is required"), ""))
+		return
+	}
+
+	// Validate the token
+	_, err := h.JWTValidator.ValidateToken(authToken)
+	if err != nil {
+		handler.Error(c, stacktrace.Propagate(err, "JWT validation failed"))
+		return
+	}
+
 	var request ente.SendOTTRequest
 	if err := c.ShouldBindJSON(&request); err != nil {
 		handler.Error(c, stacktrace.Propagate(err, ""))
 		return
 	}
-	email := strings.ToLower(request.Email)
-	if len(email) == 0 {
-		handler.Error(c, stacktrace.Propagate(ente.ErrBadRequest, "Email id is missing"))
-		return
-	}
-	err := h.UserController.SendEmailOTT(c, email, request.Purpose)
+	username, err := h.JWTValidator.GetPreferredUsername(authToken)
+	//email := strings.ToLower(request.Email)
+	//if len(email) == 0 {
+	//	handler.Error(c, stacktrace.Propagate(ente.ErrBadRequest, "Email id is missing"))
+	//	return
+	//}
+	err = h.UserController.SendEmailOTT(c, username, request.Purpose)
 	if err != nil {
 		handler.Error(c, stacktrace.Propagate(err, ""))
 		return
@@ -161,11 +177,36 @@ func (h *UserHandler) GetSessionValidityV2(c *gin.Context) {
 // VerifyEmail validates that the OTT provided in the request is valid for the
 // provided email address and if yes returns the users credentials
 func (h *UserHandler) VerifyEmail(c *gin.Context) {
+	// Validate JWT token
+	authToken := c.GetHeader("Authorization")
+	if authToken == "" {
+		handler.Error(c, stacktrace.Propagate(ente.NewBadRequestWithMessage("Authorization header is required"), ""))
+		return
+	}
+
+	// Validate the token
+	_, err := h.JWTValidator.ValidateToken(authToken)
+	if err != nil {
+		handler.Error(c, stacktrace.Propagate(err, "JWT validation failed"))
+		return
+	}
+
+	// Get username from token
+	username, err := h.JWTValidator.GetPreferredUsername(authToken)
+	if err != nil {
+		handler.Error(c, stacktrace.Propagate(err, "Failed to get username from token"))
+		return
+	}
+
 	var request ente.EmailVerificationRequest
 	if err := c.ShouldBindJSON(&request); err != nil {
 		handler.Error(c, stacktrace.Propagate(err, ""))
 		return
 	}
+
+	// Override email in request with username from token
+	request.Email = username
+
 	response, err := h.UserController.VerifyEmail(c, request)
 	if err != nil {
 		handler.Error(c, stacktrace.Propagate(err, ""))

@@ -63,7 +63,7 @@ func (h *HealthCheckHandler) PingDBStats(c *gin.Context) {
 }
 
 func (h *HealthCheckHandler) PerformHealthCheck() {
-	logrus.Info("Performing HC");
+	logrus.Info("Performing HC")
 	healthCheckURL := viper.GetString("internal.health-check-url")
 	if healthCheckURL == "" {
 		if !config.IsLocalEnvironment() {

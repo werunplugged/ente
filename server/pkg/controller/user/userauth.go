@@ -261,12 +261,10 @@ func (c *UserController) verifyEmailOtt(context *gin.Context, email string, ott 
 // VerifyEmail validates that the OTT provided in the request is valid for the
 // provided email address and if yes returns the users credentials
 func (c *UserController) VerifyEmail(context *gin.Context, request ente.EmailVerificationRequest) (ente.EmailAuthorizationResponse, error) {
-	email := strings.ToLower(request.Email)
-	err := c.verifyEmailOtt(context, email, request.OTT)
-	if err != nil {
-		return ente.EmailAuthorizationResponse{}, stacktrace.Propagate(err, "")
-	}
-	return c.onVerificationSuccess(context, email, request.Source)
+	username := strings.ToLower(request.Email)
+	// The username is now coming from the JWT token, validated in the API handler
+	// No need to verify OTT as we're using JWT token validation instead
+	return c.onVerificationSuccess(context, username, request.Source)
 }
 
 // ChangeEmail validates that the OTT provided in the request is valid for the

@@ -6,6 +6,7 @@ import (
 	b64 "encoding/base64"
 	"fmt"
 	"github.com/ente-io/museum/pkg/controller/collections"
+	"github.com/ente-io/museum/pkg/utils/auth"
 	"net/http"
 	"os"
 	"os/signal"
@@ -481,9 +482,17 @@ func main() {
 		PasskeyController: passkeyCtrl,
 		LockCtrl:          lockController,
 	}
+
+	// Initialize JWT validator
+	jwtValidator, err := auth.NewJWTValidator()
+	if err != nil {
+		log.Fatalf("Failed to initialize JWT validator: %v", err)
+	}
+
 	userHandler := &api.UserHandler{
 		UserController:      userController,
 		EmergencyController: emergencyCtrl,
+		JWTValidator:        jwtValidator,
 	}
 	publicAPI.POST("/users/ott", userHandler.SendOTT)
 	publicAPI.POST("/users/verify-email", userHandler.VerifyEmail)

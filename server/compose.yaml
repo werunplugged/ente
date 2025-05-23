@@ -8,10 +8,15 @@ services:
         GIT_COMMIT: development-cluster
     ports:
       - 8080:8080 # API
+      - 40000:40000
       # - 2112:2112 # Prometheus metrics (uncomment to access externally)
     depends_on:
       postgres:
         condition: service_healthy
+    security_opt:
+      - apparmor=unconfined
+    cap_add:
+      - SYS_PTRACE
     environment:
       ENTE_CREDENTIALS_FILE: /credentials.yaml
     configs:
@@ -41,6 +46,8 @@ services:
       start_interval: 1s
     volumes:
       - postgres-data:/var/lib/postgresql/data
+    ports:
+      - 5432:5432
 
   minio:
     image: minio/minio
