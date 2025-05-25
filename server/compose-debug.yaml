@@ -12,6 +12,10 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    security_opt:
+      - apparmor=unconfined
+    cap_add:
+      - SYS_PTRACE
     environment:
       ENTE_CREDENTIALS_FILE: /credentials.yaml
     configs:
@@ -25,7 +29,7 @@ services:
   socat:
     image: alpine/socat
     network_mode: service:museum
-    depends_on: [museum]
+    depends_on: [ museum ]
     command: "TCP-LISTEN:3200,fork,reuseaddr TCP:minio:3200"
 
   postgres:
