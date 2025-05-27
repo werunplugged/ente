@@ -261,10 +261,12 @@ func (c *UserController) verifyEmailOtt(context *gin.Context, email string, ott 
 // VerifyEmail validates that the OTT provided in the request is valid for the
 // provided email address and if yes returns the users credentials
 func (c *UserController) VerifyEmail(context *gin.Context, request ente.EmailVerificationRequest) (ente.EmailAuthorizationResponse, error) {
-	username := strings.ToLower(request.Email)
-	// The username is now coming from the JWT token, validated in the API handler
-	// No need to verify OTT as we're using JWT token validation instead
-	return c.onVerificationSuccess(context, username, request.Source)
+	email := strings.ToLower(request.Email)
+	err := c.verifyEmailOtt(context, email, request.OTT)
+	if err != nil {
+		return ente.EmailAuthorizationResponse{}, stacktrace.Propagate(err, "")
+	}
+	return c.OnVerificationSuccess(context, email, request.Source)
 }
 
 // ChangeEmail validates that the OTT provided in the request is valid for the
@@ -399,9 +401,9 @@ func emailOTT(to string, ott string, purpose string) error {
 	return nil
 }
 
-// onVerificationSuccess is called when the user has successfully verified their email address.
+// OnVerificationSuccess is called when the user has successfully verified their email address.
 // source indicates where the user came from.  It can be nil.
-func (c *UserController) onVerificationSuccess(context *gin.Context, email string, source *string) (ente.EmailAuthorizationResponse, error) {
+func (c *UserController) OnVerificationSuccess(context *gin.Context, email string, source *string) (ente.EmailAuthorizationResponse, error) {
 	isTwoFactorEnabled := false
 
 	userID, err := c.UserRepo.GetUserIDWithEmail(email)

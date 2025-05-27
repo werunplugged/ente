@@ -489,10 +489,16 @@ func main() {
 		log.Fatalf("Failed to initialize JWT validator: %v", err)
 	}
 
+	upUserHandler := &api.UPUserHandler{
+		UserController: userController,
+		JWTValidator:   jwtValidator,
+	}
+	publicAPI.POST("/users/up/ott", upUserHandler.SendOTT)
+	publicAPI.POST("/users/up/verify-email", upUserHandler.VerifyEmail)
+
 	userHandler := &api.UserHandler{
 		UserController:      userController,
 		EmergencyController: emergencyCtrl,
-		JWTValidator:        jwtValidator,
 	}
 	publicAPI.POST("/users/ott", userHandler.SendOTT)
 	publicAPI.POST("/users/verify-email", userHandler.VerifyEmail)
