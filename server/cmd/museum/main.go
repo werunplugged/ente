@@ -494,7 +494,6 @@ func main() {
 		JWTValidator:   jwtValidator,
 	}
 	publicAPI.POST("/users/up/ott", upUserHandler.SendOTT)
-	publicAPI.POST("/users/up/verify-email", upUserHandler.VerifyEmail)
 
 	userHandler := &api.UserHandler{
 		UserController:      userController,

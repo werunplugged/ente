@@ -28,7 +28,7 @@ func (h *UPUserHandler) SendOTT(c *gin.Context) {
 	// Validate the token
 	_, err := h.JWTValidator.ValidateToken(authToken)
 	if err != nil {
-		handler.Error(c, stacktrace.Propagate(err, "JWT validation failed"))
+		handler.Error(c, stacktrace.Propagate(ente.ErrAuthenticationRequired, "JWT validation failed"))
 		return
 	}
 
@@ -47,46 +47,13 @@ func (h *UPUserHandler) SendOTT(c *gin.Context) {
 		handler.Error(c, stacktrace.Propagate(err, ""))
 		return
 	} else {
-		c.Status(200)
-	}
-}
+		source := "UP Store"
 
-// VerifyEmail validates the JWT token, extracts the username from it, and then calls the original VerifyEmail method
-func (h *UPUserHandler) VerifyEmail(c *gin.Context) {
-	// Validate JWT token
-	authToken := c.GetHeader("Authorization")
-	if authToken == "" {
-		handler.Error(c, stacktrace.Propagate(ente.NewBadRequestWithMessage("Authorization header is required"), ""))
-		return
+		response, err := h.UserController.OnVerificationSuccess(c, username, &source)
+		if err != nil {
+			handler.Error(c, stacktrace.Propagate(err, ""))
+			return
+		}
+		c.JSON(http.StatusOK, response)
 	}
-
-	// Validate the token
-	_, err := h.JWTValidator.ValidateToken(authToken)
-	if err != nil {
-		handler.Error(c, stacktrace.Propagate(err, "JWT validation failed"))
-		return
-	}
-
-	// Get username from token
-	username, err := h.JWTValidator.GetPreferredUsername(authToken)
-	if err != nil {
-		handler.Error(c, stacktrace.Propagate(err, "Failed to get username from token"))
-		return
-	}
-
-	var request ente.EmailVerificationRequest
-	if err := c.ShouldBindJSON(&request); err != nil {
-		handler.Error(c, stacktrace.Propagate(err, ""))
-		return
-	}
-
-	// Override email in request with username from token
-	request.Email = username
-
-	response, err := h.UserController.OnVerificationSuccess(c, request.Email, request.Source)
-	if err != nil {
-		handler.Error(c, stacktrace.Propagate(err, ""))
-		return
-	}
-	c.JSON(http.StatusOK, response)
 }
