@@ -19,7 +19,7 @@ pipeline {
         stage('Docker') {
             steps {
                 withFolderProperties {
-                        sh "docker build  --no-cache -t ${IMAGE_URL} -f server/Dockerfile ."
+                        sh "docker build  --no-cache -t ${IMAGE_URL} -f server/Dockerfile server/"
                     withCredentials([usernamePassword(credentialsId: 'github_registry', usernameVariable: 'DOCKER_USERNAME', passwordVariable: 'DOCKER_PASSWORD')]) {
                         sh "docker login ghcr.io -u ${DOCKER_USERNAME} -p ${DOCKER_PASSWORD}"
                         sh "docker push ${IMAGE_URL}"
