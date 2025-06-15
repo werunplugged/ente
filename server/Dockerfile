@@ -23,5 +23,4 @@ COPY web-templates web-templates
 
 ARG GIT_COMMIT
 ENV GIT_COMMIT=$GIT_COMMIT
-
 CMD ["./museum"]
