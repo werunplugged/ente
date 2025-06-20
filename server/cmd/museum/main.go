@@ -100,6 +100,7 @@ func main() {
 	viper.SetDefault("apps.accounts", "https://accounts.ente.io")
 	viper.SetDefault("apps.cast", "https://cast.ente.io")
 	viper.SetDefault("apps.family", "https://family.ente.io")
+	viper.SetDefault("unplugged.api-host", "https://up-app-dev.unpluggedsystems.app")
 
 	setupLogger(environment)
 	log.Infof("Booting up %s server with commit #%s", environment, os.Getenv("GIT_COMMIT"))
@@ -667,6 +668,26 @@ func main() {
 		PlayStoreController: playStoreController,
 		StripeController:    stripeController,
 	}
+
+	// Initialize Unplugged billing controller and handler
+	upBillingController := controller.NewUPBillingController(
+		billingRepo,
+		userRepo,
+		usageRepo,
+		viper.GetString("unplugged.api-host"),
+	)
+
+	upBillingHandler := &api.UPBillingHandler{
+		Controller: upBillingController,
+	}
+	// Unplugged billing endpoints
+	publicAPI.GET("/billing/up/plans/v2", upBillingHandler.GetPlansV2)
+	privateAPI.GET("/billing/up/user-plans", upBillingHandler.GetUserPlans)
+	privateAPI.GET("/billing/up/usage", upBillingHandler.GetUsage)
+	privateAPI.GET("/billing/up/subscription", upBillingHandler.GetSubscription)
+	privateAPI.POST("/billing/up/cancel-subscription", upBillingHandler.CancelSubscription)
+	//--------------------------------------
+
 	publicAPI.GET("/billing/plans/v2", billingHandler.GetPlansV2)
 	privateAPI.GET("/billing/user-plans", billingHandler.GetUserPlans)
 	privateAPI.GET("/billing/usage", billingHandler.GetUsage)

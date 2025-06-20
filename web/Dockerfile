@@ -58,11 +58,8 @@ EXPOSE 3004
 ENV ENTE_API_ORIGIN=http://localhost:8080
 ENV ENTE_ALBUMS_ORIGIN=https://localhost:3002
 
-COPY <<EOF /docker-entrypoint.d/90-replace-ente-env.sh
-find /out -name '*.js' |
-    xargs sed -i'' "s#ENTE_API_ORIGIN_PLACEHOLDER#\$ENTE_API_ORIGIN#g"
-find /out/photos -name '*.js' |
-    xargs sed -i'' "s#ENTE_ALBUMS_ORIGIN_PLACEHOLDER#\$ENTE_ALBUMS_ORIGIN#g"
-EOF
-
+RUN mkdir -p /docker-entrypoint.d
+RUN echo '#!/bin/sh' > /docker-entrypoint.d/90-replace-ente-env.sh
+RUN echo 'find /out -name "*.js" | xargs sed -i "s#ENTE_API_ORIGIN_PLACEHOLDER#${ENTE_API_ORIGIN}#g"' >> /docker-entrypoint.d/90-replace-ente-env.sh
+RUN echo 'find /out/photos -name "*.js" | xargs sed -i "s#ENTE_ALBUMS_ORIGIN_PLACEHOLDER#${ENTE_ALBUMS_ORIGIN}#g"' >> /docker-entrypoint.d/90-replace-ente-env.sh
 RUN chmod +x /docker-entrypoint.d/90-replace-ente-env.sh
