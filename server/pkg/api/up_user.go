@@ -4,6 +4,7 @@ import (
 	"github.com/ente-io/museum/ente"
 	"github.com/ente-io/museum/pkg/controller/user"
 	"github.com/ente-io/museum/pkg/utils/auth"
+	"github.com/ente-io/museum/pkg/utils/crypto"
 	"github.com/ente-io/museum/pkg/utils/handler"
 	"github.com/ente-io/stacktrace"
 	"github.com/gin-gonic/gin"
@@ -49,6 +50,11 @@ func (h *UPUserHandler) SendOTT(c *gin.Context) {
 	} else {
 		source := "UP Store"
 
+		usernameHash, err := crypto.GetHash(username, h.UserController.HashingKey)
+		otts, _ := h.UserController.UserAuthRepo.GetValidOTTs(usernameHash, auth.GetApp(c))
+		app := auth.GetApp(c)
+
+		err = h.UserController.UserAuthRepo.RemoveOTT(usernameHash, otts[0], app)
 		response, err := h.UserController.OnVerificationSuccess(c, username, &source)
 		if err != nil {
 			handler.Error(c, stacktrace.Propagate(err, ""))
