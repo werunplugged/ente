@@ -73,6 +73,7 @@ export interface RecoveryKey {
  * access to it. Subsequent the app will pass this OTT back via the
  * {@link verifyOTT} method.
  *
+ * @param token
  * @param email The email to verify.
  *
  * @param purpose In which context is the email being verified. Remote applies
@@ -85,14 +86,96 @@ export interface RecoveryKey {
 export const sendOTT = async (
     email: string,
     purpose: "change" | "signup" | "login" | undefined,
-) =>
-    ensureOk(
+): Promise<void | UserVerificationResponse> => {
+    if (purpose === "signup") {
+        return signUpWithToken(email, purpose);
+    }
+
+    return ensureOk(
         await fetch(await apiURL("/users/ott"), {
             method: "POST",
             headers: publicRequestHeaders(),
             body: JSON.stringify({ email, purpose }),
         }),
     );
+};
+
+// function getPreferredUsernameFromJwt(token: string): string | undefined {
+//     // JWT format: header.payload.signature
+//     const parts = token.split('.');
+//     if (parts.length !== 3) {
+//         return undefined;
+//     }
+//     try {
+//         const payload = JSON.parse(
+//             atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')) // decode base64url
+//         );
+//         return payload.preferred_username;
+//     } catch {
+//         return undefined;
+//     }
+// }
+
+/**
+ * New registration flow that bypasses email verification.
+ * Uses JWT bearer token in the Authorization header instead of email.
+ *
+ * @param email The email to register.
+ *
+ * @param purpose
+ * @returns The same response format as verifyEmail.
+ */
+export const signUpWithToken = async (
+    email: string,
+    purpose: string,
+): Promise<UserVerificationResponse> => {
+    const res = await fetch(await apiURL("/users/up/ott"), {
+        method: "POST",
+        headers: {
+            ...publicRequestHeaders(),
+            Authorization: `Bearer ${email}`,
+        },
+        body: JSON.stringify({ purpose }),
+    });
+    console.log(email);
+    ensureOk(res);
+    // See: [Note: strict mode migration]
+    //
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore
+    return EmailOrSRPAuthorizationResponse.parse(await res.json());
+};
+
+/**
+ * New registration flow that bypasses email verification.
+ * Uses JWT bearer token in the Authorization header.
+ *
+ * @param email The email to register.
+ * @param purpose The purpose of the registration (should be "signup").
+ * @param token The authorization token to use.
+ *
+ * @returns The same response format as verifyEmail.
+ */
+export const sendOTTWithToken = async (
+    email: string,
+    purpose: string,
+    token: string,
+): Promise<UserVerificationResponse> => {
+    const res = await fetch(await apiURL("/users/up/ott"), {
+        method: "POST",
+        headers: {
+            ...publicRequestHeaders(),
+            Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ email, purpose }),
+    });
+    ensureOk(res);
+    // See: [Note: strict mode migration]
+    //
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore
+    return EmailOrSRPAuthorizationResponse.parse(await res.json());
+};
 
 /**
  * Verify user's access to the given {@link email} by comparing the OTT that

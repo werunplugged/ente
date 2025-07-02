@@ -2,9 +2,17 @@ package controller
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"github.com/ente-io/museum/pkg/controller/commonbilling"
+	"github.com/ente-io/museum/pkg/controller/discord"
+	"github.com/ente-io/museum/pkg/controller/email"
+	log "github.com/sirupsen/logrus"
+	"github.com/spf13/viper"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/ente-io/museum/ente"
@@ -27,24 +35,32 @@ const (
 	// Unplugged API endpoints
 	UnpluggedSubscriptionDetailsEndpoint = "/api/subscriptions/v2/details"
 	UnpluggedSubscriptionCancelEndpoint  = "/api/subscriptions/v2/cancel"
+	GetUserSubscription                  = "/inner/by-username?username="
 )
 
 // UpSubscriptionDetails represents the response from Unplugged subscription details endpoint
 type UpSubscriptionDetails struct {
-	ID       string  `json:"id"`
-	Type     string  `json:"type"`     // enum BASIC, PREMIUM
-	Interval string  `json:"interval"` // YEAR, MONTH
-	Price    float64 `json:"price"`
-	Currency string  `json:"currency"`
-	Provider string  `json:"provider"` // UNPLUGGED, STRIPE
+	ID             string            `json:"id"`
+	Type           string            `json:"type"`     // enum BASIC, PREMIUM
+	Interval       string            `json:"interval"` // YEAR, MONTH
+	Price          string            `json:"priceId"`
+	Currency       string            `json:"currency"`
+	Provider       string            `json:"provider"` // UNPLUGGED, STRIPE
+	Username       string            `json:"username"`
+	ExpirationDate time.Time         `json:"expirationDate"`
+	Metadata       map[string]string `json:"metadata"`
+	EndReason      string            `json:"endReason"`
 }
 
 // UPBillingController provides abstractions for handling Unplugged billing related queries
 type UPBillingController struct {
-	BillingRepo *repo.BillingRepository
-	UserRepo    *repo.UserRepository
-	UsageRepo   *repo.UsageRepository
-	APIHost     string
+	BillingRepo           *repo.BillingRepository
+	UserRepo              *repo.UserRepository
+	UsageRepo             *repo.UsageRepository
+	UPStoreController     *UPStoreController
+	CommonBillCtrl        *commonbilling.Controller
+	EmailNotificationCtrl *email.EmailNotificationController
+	DiscordController     *discord.DiscordController
 }
 
 // NewUPBillingController returns a new instance of UPBillingController
@@ -52,13 +68,11 @@ func NewUPBillingController(
 	billingRepo *repo.BillingRepository,
 	userRepo *repo.UserRepository,
 	usageRepo *repo.UsageRepository,
-	apiHost string,
 ) *UPBillingController {
 	return &UPBillingController{
 		BillingRepo: billingRepo,
 		UserRepo:    userRepo,
 		UsageRepo:   usageRepo,
-		APIHost:     apiHost,
 	}
 }
 
@@ -89,6 +103,86 @@ func (c *UPBillingController) GetFreePlan() ente.FreePlan {
 	}
 }
 
+// VerifySubscription verifies and returns the verified subscription
+func (c *UPBillingController) UPVerifySubscription(
+	userID int64,
+	productID string) (ente.Subscription, error) {
+
+	if productID == ente.FreePlanProductID {
+		return c.BillingRepo.GetUserSubscription(userID)
+	}
+	var newSubscription ente.Subscription
+	var err error
+	newSubscription, err = c.UPStoreController.GetVerifiedSubscription(userID)
+	if err != nil {
+		return ente.Subscription{}, stacktrace.Propagate(err, "")
+	}
+
+	if err != nil {
+		return ente.Subscription{}, stacktrace.Propagate(err, "")
+	}
+	currentSubscription, err := c.BillingRepo.GetUserSubscription(userID)
+	if err != nil {
+		return ente.Subscription{}, stacktrace.Propagate(err, "")
+	}
+	newSubscriptionExpiresSooner := newSubscription.ExpiryTime < currentSubscription.ExpiryTime
+	isUpgradingFromFreePlan := currentSubscription.ProductID == ente.FreePlanProductID
+	hasChangedProductID := currentSubscription.ProductID != newSubscription.ProductID
+	isOutdatedPurchase := !isUpgradingFromFreePlan && !hasChangedProductID && newSubscriptionExpiresSooner
+
+	if isOutdatedPurchase {
+		// User is reporting an outdated purchase that was already verified
+		// no-op
+		log.Info("Outdated purchase reported")
+		return currentSubscription, nil
+	}
+	if newSubscription.Storage < currentSubscription.Storage {
+		canDowngrade, canDowngradeErr := c.CommonBillCtrl.CanDowngradeToGivenStorage(newSubscription.Storage, userID)
+		if canDowngradeErr != nil {
+			return ente.Subscription{}, stacktrace.Propagate(canDowngradeErr, "")
+		}
+		if !canDowngrade {
+			return ente.Subscription{}, stacktrace.Propagate(ente.ErrCannotDowngrade, "")
+		}
+		log.Info("Usage is good")
+	}
+	if newSubscription.OriginalTransactionID != "" && newSubscription.OriginalTransactionID != "none" {
+		existingSub, existingSubErr := c.BillingRepo.GetSubscriptionForTransaction(newSubscription.OriginalTransactionID, UnpluggedProvider)
+		if existingSubErr != nil {
+			if errors.Is(existingSubErr, sql.ErrNoRows) {
+				log.Info("No subscription created yet")
+			} else {
+				log.Info("Something went wrong")
+				log.WithError(existingSubErr).Error("GetSubscriptionForTransaction failed")
+				return ente.Subscription{}, stacktrace.Propagate(existingSubErr, "")
+			}
+		} else {
+			if existingSub.UserID != userID {
+				log.WithFields(log.Fields{
+					"original_transaction_id": existingSub.OriginalTransactionID,
+					"existing_user":           existingSub.UserID,
+					"current_user":            userID,
+				}).Error("Subscription for given transactionID is attached with different user")
+				log.Info("Subscription attached to different user")
+				return ente.Subscription{}, stacktrace.Propagate(&ente.ErrSubscriptionAlreadyClaimed,
+					fmt.Sprintf("Subscription with txn id %s already associated with user %d", newSubscription.OriginalTransactionID, existingSub.UserID))
+			}
+		}
+	}
+	err = c.BillingRepo.ReplaceSubscription(
+		currentSubscription.ID,
+		newSubscription,
+	)
+	if err != nil {
+		return ente.Subscription{}, stacktrace.Propagate(err, "")
+	}
+	log.Info("Replaced subscription")
+	newSubscription.ID = currentSubscription.ID
+
+	log.Info("Returning new subscription with ID " + strconv.FormatInt(newSubscription.ID, 10))
+	return newSubscription, nil
+}
+
 // GetUserPlans returns the available plans for a user
 func (c *UPBillingController) GetUserPlans(ctx context.Context, userID int64) ([]ente.BillingPlan, error) {
 	return c.GetPlans(), nil
@@ -110,8 +204,8 @@ func (c *UPBillingController) GetSubscription(ctx context.Context, userID int64,
 	client := &http.Client{
 		Timeout: 10 * time.Second,
 	}
-
-	req, err := http.NewRequest("GET", c.APIHost+UnpluggedSubscriptionDetailsEndpoint, nil)
+	urlSubscriptionInner := viper.GetString("unplugged-subscription.inner-api-host")
+	req, err := http.NewRequest("GET", urlSubscriptionInner+UnpluggedSubscriptionDetailsEndpoint, nil)
 	if err != nil {
 		return subscription, stacktrace.Propagate(err, "failed to create request")
 	}
@@ -184,8 +278,9 @@ func (c *UPBillingController) CancelSubscription(ctx context.Context, userID int
 	client := &http.Client{
 		Timeout: 10 * time.Second,
 	}
+	urlSubscriptionInner := viper.GetString("unplugged-subscription.inner-api-host")
 
-	req, err := http.NewRequest("DELETE", c.APIHost+UnpluggedSubscriptionCancelEndpoint, nil)
+	req, err := http.NewRequest("DELETE", urlSubscriptionInner+UnpluggedSubscriptionCancelEndpoint, nil)
 	if err != nil {
 		return stacktrace.Propagate(err, "failed to create request")
 	}
@@ -214,13 +309,4 @@ func (c *UPBillingController) CancelSubscription(ctx context.Context, userID int
 	}
 
 	return nil
-}
-
-// GetUsage returns the storage usage for the requesting user
-func (c *UPBillingController) GetUsage(ctx context.Context, userID int64) (int64, error) {
-	usage, err := c.UsageRepo.GetUsage(userID)
-	if err != nil {
-		return 0, stacktrace.Propagate(err, "")
-	}
-	return usage, nil
 }

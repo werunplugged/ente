@@ -101,6 +101,7 @@ func main() {
 	viper.SetDefault("apps.cast", "https://cast.ente.io")
 	viper.SetDefault("apps.family", "https://family.ente.io")
 	viper.SetDefault("unplugged.api-host", "https://up-app-dev.unpluggedsystems.app")
+	viper.SetDefault("unplugged-subscription.inner-api-host", "https://up-app-dev.unpluggedsystems.app")
 
 	setupLogger(environment)
 	log.Infof("Booting up %s server with commit #%s", environment, os.Getenv("GIT_COMMIT"))
@@ -686,6 +687,7 @@ func main() {
 	privateAPI.GET("/billing/up/usage", upBillingHandler.GetUsage)
 	privateAPI.GET("/billing/up/subscription", upBillingHandler.GetSubscription)
 	privateAPI.POST("/billing/up/cancel-subscription", upBillingHandler.CancelSubscription)
+	privateAPI.POST("/billing/up/verify-subscription", upBillingHandler.)
 	//--------------------------------------
 
 	publicAPI.GET("/billing/plans/v2", billingHandler.GetPlansV2)

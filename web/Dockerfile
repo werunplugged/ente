@@ -5,7 +5,7 @@ FROM node:22-alpine AS builder
 WORKDIR /build
 COPY . .
 
-ENV NEXT_PUBLIC_ENTE_ENDPOINT=ENTE_API_ORIGIN_PLACEHOLDER
+ENV NEXT_PUBLIC_ENTE_ENDPOINT=https://photos.unplugged-systems.com
 ENV NEXT_PUBLIC_ENTE_ALBUMS_ENDPOINT=ENTE_ALBUMS_ORIGIN_PLACEHOLDER
 
 # `yarn install` is flaky on the GitHub arm64 runners otherwise.
@@ -55,7 +55,7 @@ EXPOSE 3002
 EXPOSE 3003
 EXPOSE 3004
 
-ENV ENTE_API_ORIGIN=http://localhost:8080
+ENV ENTE_API_ORIGIN=https://photos.unplugged-systems.com
 ENV ENTE_ALBUMS_ORIGIN=https://localhost:3002
 
 RUN mkdir -p /docker-entrypoint.d

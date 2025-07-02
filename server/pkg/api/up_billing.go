@@ -1,6 +1,7 @@
 package api
 
 import (
+	"github.com/ente-io/museum/ente"
 	"net/http"
 
 	"github.com/ente-io/museum/pkg/controller"
@@ -74,6 +75,24 @@ func (h *UPBillingHandler) GetUsage(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"usage": usage,
+	})
+}
+
+// VerifySubscription verifies and returns the verified subscription
+func (h *UPBillingHandler) VerifySubscription(c *gin.Context) {
+	userID := auth.GetUserID(c.Request.Header)
+	var request ente.SubscriptionVerificationRequest
+	if err := c.ShouldBindJSON(&request); err != nil {
+		handler.Error(c, stacktrace.Propagate(err, ""))
+		return
+	}
+	subscription, err := h.Controller.UPVerifySubscription(userID, request.ProductID)
+	if err != nil {
+		handler.Error(c, stacktrace.Propagate(err, ""))
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"subscription": subscription,
 	})
 }
 
