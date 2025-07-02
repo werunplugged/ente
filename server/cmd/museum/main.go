@@ -675,7 +675,6 @@ func main() {
 		billingRepo,
 		userRepo,
 		usageRepo,
-		viper.GetString("unplugged.api-host"),
 	)
 
 	upBillingHandler := &api.UPBillingHandler{
@@ -687,7 +686,7 @@ func main() {
 	privateAPI.GET("/billing/up/usage", upBillingHandler.GetUsage)
 	privateAPI.GET("/billing/up/subscription", upBillingHandler.GetSubscription)
 	privateAPI.POST("/billing/up/cancel-subscription", upBillingHandler.CancelSubscription)
-	privateAPI.POST("/billing/up/verify-subscription", upBillingHandler.)
+	privateAPI.POST("/billing/up/verify-subscription", upBillingHandler.VerifySubscription)
 	//--------------------------------------
 
 	publicAPI.GET("/billing/plans/v2", billingHandler.GetPlansV2)
