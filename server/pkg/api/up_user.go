@@ -30,7 +30,7 @@ func (h *UPUserHandler) SendOTT(c *gin.Context) {
 	// Validate the token
 	_, err := h.JWTValidator.ValidateToken(authToken)
 	if err != nil {
-		handler.Error(c, stacktrace.Propagate(err, "JWT validation failed"))
+		handler.Error(c, stacktrace.Propagate(err, "Error validating token: X"+authToken+"X"))
 		return
 	}
 
