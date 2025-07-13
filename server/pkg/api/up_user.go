@@ -1,6 +1,8 @@
 package api
 
 import (
+	"net/http"
+
 	"github.com/ente-io/museum/ente"
 	"github.com/ente-io/museum/pkg/controller/user"
 	"github.com/ente-io/museum/pkg/utils/auth"
@@ -8,7 +10,6 @@ import (
 	"github.com/ente-io/museum/pkg/utils/handler"
 	"github.com/ente-io/stacktrace"
 	"github.com/gin-gonic/gin"
-	"net/http"
 )
 
 // UPUserHandler handles user-related requests for the UP API
@@ -29,7 +30,7 @@ func (h *UPUserHandler) SendOTT(c *gin.Context) {
 	// Validate the token
 	_, err := h.JWTValidator.ValidateToken(authToken)
 	if err != nil {
-		handler.Error(c, stacktrace.Propagate(ente.ErrAuthenticationRequired, "JWT validation failed"))
+		handler.Error(c, stacktrace.Propagate(err, "JWT validation failed"))
 		return
 	}
 
