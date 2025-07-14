@@ -40,6 +40,7 @@ func (m *AuthMiddleware) TokenAuthMiddleware(jwtClaimScope *jwt.ClaimScope) gin.
 			return
 		}
 		app := auth.GetApp(c)
+		logrus.Infof("TokenAuthMiddleware: app= %s, token= %s", app, token)
 		cacheKey := fmt.Sprintf("%s:%s", app, token)
 		isJWT := false
 		if jwtClaimScope != nil {
@@ -65,6 +66,7 @@ func (m *AuthMiddleware) TokenAuthMiddleware(jwtClaimScope *jwt.ClaimScope) gin.
 				}
 			}
 			if err != nil {
+				logrus.Infof("TokenAuthMiddleware: token validation failed: %s", err)
 				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
 				return
 			}
