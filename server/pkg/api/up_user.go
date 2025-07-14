@@ -54,10 +54,11 @@ func (h *UPUserHandler) SendOTT(c *gin.Context) {
 	source := "UP Store"
 
 	usernameHash, _ := crypto.GetHash(username, h.UserController.HashingKey)
-	otts, _ := h.UserController.UserAuthRepo.GetValidOTTs(usernameHash, auth.GetApp(c))
 	app := auth.GetApp(c)
-
-	h.UserController.UserAuthRepo.RemoveOTT(usernameHash, otts[0], app)
+	otts, _ := h.UserController.UserAuthRepo.GetValidOTTs(usernameHash, app)
+	if len(otts) > 0 {
+		h.UserController.UserAuthRepo.RemoveOTT(usernameHash, otts[0], app)
+	}
 	response, err := h.UserController.OnVerificationSuccess(c, username, &source)
 	if err != nil {
 		handler.Error(c, stacktrace.Propagate(err, ""))
