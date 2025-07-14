@@ -4,9 +4,10 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"github.com/sirupsen/logrus"
 	"net/http"
 	"strconv"
+
+	"github.com/sirupsen/logrus"
 
 	"github.com/ente-io/museum/ente/jwt"
 	"github.com/ente-io/museum/pkg/utils/network"
@@ -33,6 +34,7 @@ type AuthMiddleware struct {
 func (m *AuthMiddleware) TokenAuthMiddleware(jwtClaimScope *jwt.ClaimScope) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		token := auth.GetToken(c)
+		logrus.Info("TokenAuthMiddleware: token=", token)
 		if token == "" {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "missing token"})
 			return
