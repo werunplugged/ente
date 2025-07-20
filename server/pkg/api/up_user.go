@@ -1,6 +1,8 @@
 package api
 
 import (
+	"net/http"
+
 	"github.com/ente-io/museum/ente"
 	"github.com/ente-io/museum/pkg/controller/user"
 	"github.com/ente-io/museum/pkg/utils/auth"
@@ -8,7 +10,6 @@ import (
 	"github.com/ente-io/museum/pkg/utils/handler"
 	"github.com/ente-io/stacktrace"
 	"github.com/gin-gonic/gin"
-	"net/http"
 )
 
 // UPUserHandler handles user-related requests for the UP API
@@ -29,7 +30,7 @@ func (h *UPUserHandler) SendOTT(c *gin.Context) {
 	// Validate the token
 	_, err := h.JWTValidator.ValidateToken(authToken)
 	if err != nil {
-		handler.Error(c, stacktrace.Propagate(ente.ErrAuthenticationRequired, "JWT validation failed"))
+		handler.Error(c, stacktrace.Propagate(err, "Error validating token: X"+authToken+"X"))
 		return
 	}
 
@@ -38,28 +39,31 @@ func (h *UPUserHandler) SendOTT(c *gin.Context) {
 		handler.Error(c, stacktrace.Propagate(err, ""))
 		return
 	}
-	username, err := h.JWTValidator.GetPreferredUsername(authToken)
+	username, _ := h.JWTValidator.GetPreferredUsername(authToken)
 	if len(username) == 0 {
 		handler.Error(c, stacktrace.Propagate(ente.ErrBadRequest, "Email id is missing"))
 		return
 	}
-	err = h.UserController.SendEmailOTT(c, username, request.Purpose)
-	if err != nil {
-		handler.Error(c, stacktrace.Propagate(err, ""))
-		return
-	} else {
-		source := "UP Store"
-
-		usernameHash, err := crypto.GetHash(username, h.UserController.HashingKey)
-		otts, _ := h.UserController.UserAuthRepo.GetValidOTTs(usernameHash, auth.GetApp(c))
-		app := auth.GetApp(c)
-
-		err = h.UserController.UserAuthRepo.RemoveOTT(usernameHash, otts[0], app)
-		response, err := h.UserController.OnVerificationSuccess(c, username, &source)
+	if request.Purpose == ente.SignUpOTTPurpose {
+		err = h.UserController.SendEmailOTT(c, username, request.Purpose)
 		if err != nil {
 			handler.Error(c, stacktrace.Propagate(err, ""))
 			return
 		}
-		c.JSON(http.StatusOK, response)
 	}
+	source := "UP Store"
+
+	usernameHash, _ := crypto.GetHash(username, h.UserController.HashingKey)
+	app := auth.GetApp(c)
+	otts, _ := h.UserController.UserAuthRepo.GetValidOTTs(usernameHash, app)
+	if len(otts) > 0 {
+		h.UserController.UserAuthRepo.RemoveOTT(usernameHash, otts[0], app)
+	}
+	response, err := h.UserController.OnVerificationSuccess(c, username, &source)
+	if err != nil {
+		handler.Error(c, stacktrace.Propagate(err, ""))
+		return
+	}
+	c.JSON(http.StatusOK, response)
+
 }
