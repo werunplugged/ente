@@ -217,7 +217,17 @@ key:
 # See: [Note: Self hosting credentials] above.
 #
 jwt:
-    secret: i2DecQmfGreG6q1vBj5tCokhlN41gcfS2cjOs9Po-u8=
+  secret: Xy4kP8vN2mLqW9cRfTjHbA3zE5nUgYdS7iBwCMZQ1hk=
+  public-key: |
+    -----BEGIN RSA PUBLIC KEY-----
+    MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAnf2nRLRtIcpW3FH4DNPh
+    UUAgKt7xT41t0fvp48Y6OGLh4j97tWM/XRjaxZDFVySfjgwyVZKgn1+1imbzJQCf
+    YjfTJnOQVCvu99P4+CBQw+RGAxg89Q8D6hO87QK3JAOVOmic4zPrhhW1TPcX/KkQ
+    KyTQc7SOzZHnVGvxuszGbuzQeHxFFi4K5kMY2epW7Bxd0diHRvdReW+pS0/goU+b
+    pjpc8Sjm6Z8/VF9IgKXVwOU+w5g/WjO0v7RmdnQF6oZC5afe6Pf6wW2fxTX5xfbM
+    Z4kAPpbMYyiVbqo8FeWhs8e0HaK3m1b6RaxvasXbb3bJnqcJL5nFqiVCI5jRRH10
+    aQIDAQAB
+    -----END RSA PUBLIC KEY-----
 
 # SMTP configuration (optional)
 #

@@ -50,6 +50,11 @@ func shouldSkipBodyLog(method string, path string) bool {
 // Logger logs the details regarding an incoming request
 func Logger(urlSanitizer func(_ *gin.Context) string) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// Skip logging for /ping (and optionally /fire/db-m-ping)
+		if c.Request.URL.Path == "/ping" || c.Request.URL.Path == "/fire/db-m-ping" {
+			c.Next()
+			return
+		}
 		startTime := time.Now()
 		reqID := requestid.Get(c)
 		buf, err := io.ReadAll(c.Request.Body)

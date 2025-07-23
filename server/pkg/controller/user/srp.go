@@ -164,7 +164,7 @@ func (c *UserController) VerifySRPSession(context *gin.Context, req ente.VerifyS
 	if err != nil {
 		return nil, err
 	}
-	verResponse, err := c.onVerificationSuccess(context, user.Email, nil)
+	verResponse, err := c.OnVerificationSuccess(context, user.Email, nil)
 	if err != nil {
 		return nil, stacktrace.Propagate(err, "")
 	}

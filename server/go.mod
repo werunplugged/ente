@@ -11,6 +11,7 @@ require (
 	github.com/aws/aws-sdk-go v1.34.13
 	github.com/bwmarrin/discordgo v0.25.0
 	github.com/dlmiddlecote/sqlstats v1.0.2
+	github.com/ente-io/go-srp v0.0.0-20250116115009-d52061067e78
 	github.com/ente-io/stacktrace v0.0.0-20210619050357-0af9fad4639c
 	github.com/gin-contrib/gzip v0.0.5
 	github.com/gin-contrib/requestid v0.0.2-0.20210619060739-3f23d9a07dc5
@@ -19,8 +20,8 @@ require (
 	github.com/go-playground/validator/v10 v10.14.0
 	github.com/golang-jwt/jwt v3.2.1+incompatible
 	github.com/golang-migrate/migrate/v4 v4.12.2
-	github.com/google/go-cmp v0.6.0
 	github.com/google/uuid v1.6.0
+	github.com/lestrrat-go/jwx v1.2.31
 	github.com/lib/pq v1.8.0
 	github.com/lithammer/shortuuid/v3 v3.0.4
 	github.com/matoous/go-nanoid/v2 v2.1.0
@@ -36,9 +37,9 @@ require (
 	github.com/ua-parser/uap-go v0.0.0-20211112212520-00c877edfe0f
 	github.com/ulule/limiter/v3 v3.8.0
 	github.com/zsais/go-gin-prometheus v0.1.0
-	golang.org/x/crypto v0.21.0
-	golang.org/x/sync v0.8.0
-	golang.org/x/text v0.17.0
+	golang.org/x/crypto v0.32.0
+	golang.org/x/sync v0.10.0
+	golang.org/x/text v0.21.0
 	google.golang.org/api v0.114.0
 	gopkg.in/natefinch/lumberjack.v2 v2.0.0
 )
@@ -48,15 +49,21 @@ require (
 	cloud.google.com/go/longrunning v0.4.1 // indirect
 	github.com/bytedance/sonic v1.9.1 // indirect
 	github.com/chenzhuoyu/base64x v0.0.0-20221115062448-fe3a3abad311 // indirect
-	github.com/ente-io/go-srp v0.0.0-20250116115009-d52061067e78 // indirect
+	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.4.0 // indirect
 	github.com/fxamacker/cbor/v2 v2.6.0 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.2 // indirect
 	github.com/go-webauthn/x v0.1.9 // indirect
-	github.com/goccy/go-json v0.10.2 // indirect
+	github.com/goccy/go-json v0.10.3 // indirect
 	github.com/golang-jwt/jwt/v5 v5.2.1 // indirect
+	github.com/google/go-cmp v0.6.0 // indirect
 	github.com/google/go-tpm v0.9.0 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.2.3 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.4 // indirect
+	github.com/lestrrat-go/backoff/v2 v2.0.8 // indirect
+	github.com/lestrrat-go/blackmagic v1.0.2 // indirect
+	github.com/lestrrat-go/httpcc v1.0.1 // indirect
+	github.com/lestrrat-go/iter v1.0.2 // indirect
+	github.com/lestrrat-go/option v1.0.1 // indirect
 	github.com/pelletier/go-toml/v2 v2.0.8 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
@@ -112,7 +119,7 @@ require (
 	go.opencensus.io v0.24.0 // indirect
 	golang.org/x/net v0.21.0 // indirect
 	golang.org/x/oauth2 v0.7.0 // indirect
-	golang.org/x/sys v0.18.0 // indirect
+	golang.org/x/sys v0.29.0 // indirect
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
 	google.golang.org/genproto v0.0.0-20230410155749-daa745c078e1 // indirect

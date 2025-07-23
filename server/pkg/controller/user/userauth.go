@@ -266,7 +266,7 @@ func (c *UserController) VerifyEmail(context *gin.Context, request ente.EmailVer
 	if err != nil {
 		return ente.EmailAuthorizationResponse{}, stacktrace.Propagate(err, "")
 	}
-	return c.onVerificationSuccess(context, email, request.Source)
+	return c.OnVerificationSuccess(context, email, request.Source)
 }
 
 // ChangeEmail validates that the OTT provided in the request is valid for the
@@ -401,9 +401,9 @@ func emailOTT(to string, ott string, purpose string) error {
 	return nil
 }
 
-// onVerificationSuccess is called when the user has successfully verified their email address.
+// OnVerificationSuccess is called when the user has successfully verified their email address.
 // source indicates where the user came from.  It can be nil.
-func (c *UserController) onVerificationSuccess(context *gin.Context, email string, source *string) (ente.EmailAuthorizationResponse, error) {
+func (c *UserController) OnVerificationSuccess(context *gin.Context, email string, source *string) (ente.EmailAuthorizationResponse, error) {
 	isTwoFactorEnabled := false
 
 	userID, err := c.UserRepo.GetUserIDWithEmail(email)
