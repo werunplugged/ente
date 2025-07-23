@@ -1,14 +1,16 @@
-import { encryptBlobB64 } from "ente-base/crypto";
+import { encryptBlob } from "ente-base/crypto";
+import type { EncryptedBlobB64 } from "ente-base/crypto/types";
 import {
     authenticatedPublicAlbumsRequestHeaders,
     authenticatedRequestHeaders,
     ensureOk,
+    retryEnsuringHTTPOk,
     type PublicAlbumsCredentials,
 } from "ente-base/http";
 import { apiURL } from "ente-base/origins";
 import type { EnteFile } from "ente-media/file";
 import { nullToUndefined } from "ente-utils/transform";
-import { z } from "zod";
+import { z } from "zod/v4";
 
 /**
  * [Note: File data APIs]
@@ -194,8 +196,8 @@ export interface UpdatedFileDataFileIDsPage {
     fileIDs: Set<number>;
     /**
      * The latest updatedAt (epoch microseconds) time obtained from remote in
-     * this batch of sync (from amongst all of the files in the batch, not just
-     * those that were filtered to be part of {@link fileIDs}).
+     * this batch being fetched (from amongst all of the files in the batch, not
+     * just those that were filtered to be part of {@link fileIDs}).
      */
     lastUpdatedAt: number;
 }
@@ -291,7 +293,7 @@ export const putFileData = async (
     data: Uint8Array,
     lastUpdatedAt: number,
 ) => {
-    const { encryptedData, decryptionHeader } = await encryptBlobB64(
+    const { encryptedData, decryptionHeader } = await encryptBlob(
         data,
         file.key,
     );
@@ -321,7 +323,7 @@ export const putFileData = async (
  * context of the public albums app. If these are not specified, then the
  * credentials of the logged in user are used.
  *
- * @returns the (presigned) URL to the preview data, or undefined if there is
+ * @returns the (pre-signed) URL to the preview data, or undefined if there is
  * not preview data of the given type for the given file yet.
  *
  * [Note: File data vs file preview data]
@@ -377,36 +379,6 @@ export const fetchFilePreviewData = async (
     return z.object({ url: z.string() }).parse(await res.json()).url;
 };
 
-const FilePreviewDataUploadURLResponse = z.object({
-    /**
-     * The objectID with which this uploaded data can be referred to post upload
-     * (e.g. when invoking {@link putVideoData}).
-     */
-    objectID: z.string(),
-    /**
-     * A presigned URL that can be used to upload the file.
-     */
-    url: z.string(),
-});
-
-/**
- * Obtain a presigned URL that can be used to upload the "file preview data" of
- * type "vid_preview" (the file containing the encrypted video segments which
- * the "vid_preview" HLS playlist for the file would refer to).
- */
-export const getFilePreviewDataUploadURL = async (file: EnteFile) => {
-    const params = new URLSearchParams({
-        fileID: `${file.id}`,
-        type: "vid_preview",
-    });
-    const url = await apiURL("/files/data/preview-upload-url");
-    const res = await fetch(`${url}?${params.toString()}`, {
-        headers: await authenticatedRequestHeaders(),
-    });
-    ensureOk(res);
-    return FilePreviewDataUploadURLResponse.parse(await res.json());
-};
-
 /**
  * Update the video data associated with the given file to remote.
  *
@@ -424,8 +396,8 @@ export const getFilePreviewDataUploadURL = async (file: EnteFile) => {
  *
  * @param file {@link EnteFile} which this data is associated with.
  *
- * @param playlistData The playlist data, suitably encoded in a form ready for
- * encryption.
+ * @param encryptedPlaylist The encrypted playlist data (along with the nonce
+ * used during encryption).
  *
  * @param objectID Object ID of an already uploaded "file preview data" (see
  * {@link getFilePreviewDataUploadURL}).
@@ -435,25 +407,22 @@ export const getFilePreviewDataUploadURL = async (file: EnteFile) => {
  */
 export const putVideoData = async (
     file: EnteFile,
-    playlistData: Uint8Array,
+    encryptedPlaylist: EncryptedBlobB64,
     objectID: string,
     objectSize: number,
-) => {
-    const { encryptedData, decryptionHeader } = await encryptBlobB64(
-        playlistData,
-        file.key,
+) =>
+    retryEnsuringHTTPOk(
+        async () =>
+            fetch(await apiURL("/files/video-data"), {
+                method: "PUT",
+                headers: await authenticatedRequestHeaders(),
+                body: JSON.stringify({
+                    fileID: file.id,
+                    objectID,
+                    objectSize,
+                    playlist: encryptedPlaylist.encryptedData,
+                    playlistHeader: encryptedPlaylist.decryptionHeader,
+                }),
+            }),
+        { retryProfile: "background" },
     );
-
-    const res = await fetch(await apiURL("/files/video-data"), {
-        method: "PUT",
-        headers: await authenticatedRequestHeaders(),
-        body: JSON.stringify({
-            fileID: file.id,
-            objectID,
-            objectSize,
-            playlist: encryptedData,
-            playlistHeader: decryptionHeader,
-        }),
-    });
-    ensureOk(res);
-};

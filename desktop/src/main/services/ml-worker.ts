@@ -15,6 +15,7 @@ import { existsSync } from "fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import * as ort from "onnxruntime-node";
+import { z } from "zod/v4";
 import log from "../log-worker";
 import { messagePortMainEndpoint } from "../utils/comlink";
 import { wait } from "../utils/common";
@@ -22,6 +23,8 @@ import { writeStream } from "../utils/stream";
 import { fsStatMtime } from "./fs";
 
 log.debugString("Started ML utility process");
+
+process.on("uncaughtException", (e, origin) => log.error(origin, e));
 
 process.parentPort.once("message", (e) => {
     // Initialize ourselves with the data we got from our parent.
@@ -50,17 +53,10 @@ let _userDataPath: string | undefined;
 /** Equivalent to app.getPath("userData") */
 const userDataPath = () => _userDataPath!;
 
+const MLWorkerInitData = z.object({ userDataPath: z.string() });
+
 const parseInitData = (data: unknown) => {
-    if (
-        data &&
-        typeof data == "object" &&
-        "userDataPath" in data &&
-        typeof data.userDataPath == "string"
-    ) {
-        _userDataPath = data.userDataPath;
-    } else {
-        log.error("Unparseable initialization data");
-    }
+    _userDataPath = MLWorkerInitData.parse(data).userDataPath;
 };
 
 /**
@@ -188,14 +184,13 @@ const downloadModel = async (saveLocation: string, name: string) => {
 /**
  * Create an ONNX {@link InferenceSession} with some defaults.
  */
-const createInferenceSession = async (modelPath: string) => {
-    return await ort.InferenceSession.create(modelPath, {
+const createInferenceSession = (modelPath: string) =>
+    ort.InferenceSession.create(modelPath, {
         // Restrict the number of threads to 1.
         intraOpNumThreads: 1,
         // Be more conservative with RAM usage.
         enableCpuMemArena: false,
     });
-};
 
 const cachedCLIPImageSession = makeCachedInferenceSession(
     "mobileclip_s2_image_opset18_rgba_opt.onnx",
@@ -237,9 +232,11 @@ const getTokenizer = () => (_tokenizer ??= new Tokenizer());
 export const computeCLIPTextEmbeddingIfAvailable = async (text: string) => {
     const sessionOrSkip = await Promise.race([
         cachedCLIPTextSession(),
-        // Wait for a tick to get the session promise to resolved the first time
-        // this code runs on each app start (and the model has been downloaded).
-        wait(0).then(() => 1),
+        // Wait a bit to get the session promise to resolved the first time this
+        // code runs on each app start (in these cases the model will already be
+        // downloaded, so session creation should take only a 1 or 2 ticks: file
+        // system stat, and ort.InferenceSession.create).
+        wait(50).then(() => 1),
     ]);
 
     // Don't wait for the download to complete.

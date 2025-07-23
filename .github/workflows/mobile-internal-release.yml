@@ -15,7 +15,7 @@ jobs:
 
         defaults:
             run:
-                working-directory: mobile
+                working-directory: mobile/apps/photos
 
         steps:
             - name: Checkout code and submodules
@@ -55,7 +55,7 @@ jobs:
               with:
                   serviceAccountJsonPlainText: ${{ secrets.SERVICE_ACCOUNT_JSON }}
                   packageName: io.ente.photos
-                  releaseFiles: mobile/build/app/outputs/bundle/playstoreRelease/app-playstore-release.aab
+                  releaseFiles: mobile/apps/photos/build/app/outputs/bundle/playstoreRelease/app-playstore-release.aab
                   track: internal
 
             - name: Notify Discord
@@ -63,6 +63,6 @@ jobs:
               with:
                   webhook: ${{ secrets.DISCORD_INTERNAL_RELEASE_WEBHOOK }}
                   nodetail: true
-                  title: "🏆 Internal release available for Photos"
+                  title: "🏆 Internal release Photos (Branch: ${{ github.ref_name }})"
                   description: "[Download](https://play.google.com/store/apps/details?id=io.ente.photos)"
                   color: 0x00ff00
