@@ -70,7 +70,7 @@ export const LoginContents: React.FC<LoginContentsProps> = ({
             <AccountsPageTitle>{t("login")}</AccountsPageTitle>
             <SingleInputForm
                 callback={loginUser}
-                fieldType="text"
+                fieldType="email"
                 placeholder={t("enter_email")}
                 buttonText={t("login")}
                 autoComplete="username"

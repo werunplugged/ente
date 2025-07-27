@@ -20,15 +20,15 @@ import { LinkButton } from "ente-base/components/LinkButton";
 import { LoadingButton } from "ente-base/components/mui/LoadingButton";
 import { isMuseumHTTPError } from "ente-base/http";
 import log from "ente-base/log";
+import { setLSUser } from "ente-shared//storage/localStorage";
 import { VerticallyCentered } from "ente-shared/components/Container";
 import ShowHidePassword from "ente-shared/components/Form/ShowHidePassword";
 import {
     generateAndSaveIntermediateKeyAttributes,
     saveKeyInSessionStore,
 } from "ente-shared/crypto/helpers";
-import localForage from "ente-shared/storage/localForage";
+import { setData } from "ente-shared/storage/localStorage";
 import {
-    setIsFirstLogin,
     setJustSignedUp,
     setLocalReferralSource,
 } from "ente-shared/storage/localStorage/helpers";
@@ -43,11 +43,6 @@ import {
     AccountsPageFooter,
     AccountsPageTitle,
 } from "./layouts/centered-paper";
-import { configureSRP } from "../services/srp";
-import { putUserKeyAttributes } from "../services/user";
-import type { SRPSetupAttributes } from "../services/srp-remote";
-import { unstashRedirect } from "../services/redirect";
-import { getData, setData, setLSUser } from "ente-shared/storage/localStorage";
 
 interface FormValues {
     email: string;
@@ -83,22 +78,6 @@ export const SignUpContents: React.FC<SignUpContentsProps> = ({
         event.preventDefault();
     };
 
-    const getPreferredUsernameFromJwt = (token: string): string | undefined => {
-        // JWT format: header.payload.signature
-        const parts = token.split(".");
-        if (parts.length !== 3) {
-            return undefined;
-        }
-        try {
-            const payload = JSON.parse(
-                atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")), // decode base64url
-            );
-            return payload.preferred_username;
-        } catch {
-            return undefined;
-        }
-    };
-
     const registerUser = async (
         { email, passphrase, confirm, referral }: FormValues,
         { setFieldError }: FormikHelpers<FormValues>,
@@ -108,13 +87,10 @@ export const SignUpContents: React.FC<SignUpContentsProps> = ({
                 setFieldError("confirm", t("password_mismatch_error"));
                 return;
             }
-            const token = email;
-            email = getPreferredUsernameFromJwt(email) || email;
             setLoading(true);
-            let userVerificationResponse;
             try {
                 setLocalReferralSource(referral);
-                userVerificationResponse = await sendOTT(token, "signup");
+                await sendOTT(email, "signup");
                 await setLSUser({ email });
             } catch (e) {
                 log.error("Signup failed", e);
@@ -141,68 +117,7 @@ export const SignUpContents: React.FC<SignUpContentsProps> = ({
 
                 await saveKeyInSessionStore("encryptionKey", masterKey);
                 setJustSignedUp(true);
-
-                // void router.push("/verify");
-                if (!userVerificationResponse) {
-                    throw new Error("Failed to get user verification response");
-                }
-
-                const {
-                    id,
-                    encryptedToken,
-                    token,
-                    twoFactorSessionID,
-                    passkeySessionID,
-                } = userVerificationResponse;
-
-                if (passkeySessionID) {
-                    await setLSUser({
-                        email,
-                        passkeySessionID,
-                        isTwoFactorEnabled: true,
-                        isTwoFactorPasskeysEnabled: true,
-                    });
-                    setIsFirstLogin(true);
-                    void router.push("/credentials");
-                } else if (twoFactorSessionID) {
-                    await setLSUser({
-                        email,
-                        twoFactorSessionID,
-                        isTwoFactorEnabled: true,
-                    });
-                    setIsFirstLogin(true);
-                    void router.push("/two-factor/verify");
-                } else {
-                    await setLSUser({
-                        email,
-                        token,
-                        encryptedToken,
-                        id,
-                        isTwoFactorEnabled: false,
-                    });
-                    const originalKeyAttributes = getData(
-                        "originalKeyAttributes",
-                    );
-                    if (originalKeyAttributes) {
-                        await putUserKeyAttributes(originalKeyAttributes);
-                    }
-                    if (getData("srpSetupAttributes")) {
-                        const srpSetupAttributes: SRPSetupAttributes =
-                            getData("srpSetupAttributes");
-                        await configureSRP(srpSetupAttributes);
-                    }
-
-                    await localForage.clear();
-                    setIsFirstLogin(true);
-                    const redirectURL = unstashRedirect();
-                    void router.push(redirectURL ?? "/generate");
-                    // if (keyAttributes?.encryptedKey) {
-                    //     clearSessionStorage();
-                    //     void router.push(redirectURL ?? "/credentials");
-                    // } else {
-                    //     void router.push(redirectURL ?? "/generate");
-                    // }
-                }
+                void router.push("/verify");
             } catch (e) {
                 setFieldError("confirm", t("password_generation_failed"));
                 throw e;
@@ -223,7 +138,7 @@ export const SignUpContents: React.FC<SignUpContentsProps> = ({
             }}
             validationSchema={Yup.object().shape({
                 email: Yup.string()
-                    // .email(t("invalid_email_error"))
+                    .email(t("invalid_email_error"))
                     .required(t("required")),
                 passphrase: Yup.string().required(t("required")),
                 confirm: Yup.string().required(t("required")),
@@ -245,7 +160,7 @@ export const SignUpContents: React.FC<SignUpContentsProps> = ({
                             id="email"
                             name="email"
                             autoComplete="username"
-                            type="text"
+                            type="email"
                             label={t("enter_email")}
                             value={values.email}
                             onChange={handleChange("email")}

@@ -5,7 +5,7 @@ FROM node:22-alpine AS builder
 WORKDIR /build
 COPY . .
 
-ENV NEXT_PUBLIC_ENTE_ENDPOINT=https://photos.unplugged-systems.com
+ENV NEXT_PUBLIC_ENTE_ENDPOINT=ENTE_API_ORIGIN_PLACEHOLDER
 ENV NEXT_PUBLIC_ENTE_ALBUMS_ENDPOINT=ENTE_ALBUMS_ORIGIN_PLACEHOLDER
 
 # `yarn install` is flaky on the GitHub arm64 runners otherwise.
@@ -55,11 +55,14 @@ EXPOSE 3002
 EXPOSE 3003
 EXPOSE 3004
 
-ENV ENTE_API_ORIGIN=https://photos.unplugged-systems.com
+ENV ENTE_API_ORIGIN=http://localhost:8080
 ENV ENTE_ALBUMS_ORIGIN=https://localhost:3002
 
-RUN mkdir -p /docker-entrypoint.d
-RUN echo '#!/bin/sh' > /docker-entrypoint.d/90-replace-ente-env.sh
-RUN echo 'find /out -name "*.js" | xargs sed -i "s#ENTE_API_ORIGIN_PLACEHOLDER#${ENTE_API_ORIGIN}#g"' >> /docker-entrypoint.d/90-replace-ente-env.sh
-RUN echo 'find /out/photos -name "*.js" | xargs sed -i "s#ENTE_ALBUMS_ORIGIN_PLACEHOLDER#${ENTE_ALBUMS_ORIGIN}#g"' >> /docker-entrypoint.d/90-replace-ente-env.sh
+COPY <<EOF /docker-entrypoint.d/90-replace-ente-env.sh
+find /out -name '*.js' |
+    xargs sed -i'' "s#ENTE_API_ORIGIN_PLACEHOLDER#\$ENTE_API_ORIGIN#g"
+find /out/photos -name '*.js' |
+    xargs sed -i'' "s#ENTE_ALBUMS_ORIGIN_PLACEHOLDER#\$ENTE_ALBUMS_ORIGIN#g"
+EOF
+
 RUN chmod +x /docker-entrypoint.d/90-replace-ente-env.sh

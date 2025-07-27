@@ -61,7 +61,7 @@ func (c *UPStoreController) verifySubscriptionByUsername(username string) (UpSub
 	client := &http.Client{
 		Timeout: 10 * time.Second,
 	}
-	req, err := http.NewRequest("GET", urlSubscriptionInner+GetUserSubscription+username, nil)
+	req, err := http.NewRequest("GET", urlSubscriptionInner+UnpluggedGetUserSubscriptionEndpoint+username, nil)
 	if err != nil {
 		return UpSubscriptionDetails{}, stacktrace.Propagate(err, "failed to create request")
 	}

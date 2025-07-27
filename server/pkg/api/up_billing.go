@@ -84,6 +84,10 @@ func (h *UPBillingHandler) GetSubscription(c *gin.Context) {
 	// Extract the token from the Authorization header (Bearer token)
 	if len(token) > 7 && token[:7] == "Bearer " {
 		token = token[7:]
+	} else {
+		// Handle the case where the token is invalid or does not use Bearer scheme
+		handler.Error(c, stacktrace.NewError("Invalid or missing Bearer token"))
+		return
 	}
 
 	subscription, err := h.Controller.GetSubscription(c.Request.Context(), userID, token)

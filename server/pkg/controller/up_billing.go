@@ -38,7 +38,7 @@ const (
 	// Unplugged API endpoints
 	UnpluggedSubscriptionDetailsEndpoint = "/api/subscriptions/v2/details"
 	UnpluggedSubscriptionCancelEndpoint  = "/api/subscriptions/v2/cancel"
-	GetUserSubscription                  = "/inner/by-username?username="
+	UnpluggedGetUserSubscriptionEndpoint = "/inner/by-username?username="
 )
 
 // UpSubscriptionDetails represents the response from Unplugged subscription details endpoint
@@ -115,6 +115,9 @@ func (c *UPBillingController) UPVerifySubscription(
 	var newSubscription ente.Subscription
 	var err error
 	newUPSubscription, err := c.UPStoreController.GetVerifiedSubscription(userID)
+	if err != nil {
+		return ente.Subscription{}, stacktrace.Propagate(err, "failed to get verified subscription")
+	}
 
 	if newUPSubscription.Type == FreePlanID {
 		subscription, err := c.BillingRepo.GetUserSubscription(userID)
@@ -127,9 +130,6 @@ func (c *UPBillingController) UPVerifySubscription(
 		return ente.Subscription{}, stacktrace.Propagate(ente.ErrCannotDowngrade, "")
 	}
 
-	if err != nil {
-		return ente.Subscription{}, stacktrace.Propagate(err, "")
-	}
 	currentSubscription, err := c.BillingRepo.GetUserSubscription(userID)
 	if err != nil {
 		return ente.Subscription{}, stacktrace.Propagate(err, "")
