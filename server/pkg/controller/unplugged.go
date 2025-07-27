@@ -3,16 +3,13 @@ package controller
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/awa/go-iap/playstore"
 	"github.com/ente-io/museum/ente"
 	"github.com/ente-io/museum/pkg/controller/commonbilling"
 	"github.com/ente-io/museum/pkg/repo"
-	"github.com/ente-io/museum/pkg/repo/storagebonus"
-	"github.com/ente-io/museum/pkg/utils/config"
 	"github.com/ente-io/stacktrace"
 	"github.com/spf13/viper"
 	"net/http"
-	"os"
+	"strings"
 	"time"
 )
 
@@ -20,75 +17,47 @@ type UPStoreController struct {
 	BillingRepo            *repo.BillingRepository
 	FileRepo               *repo.FileRepository
 	UserRepo               *repo.UserRepository
-	StorageBonusRepo       *storagebonus.Repository
 	BillingPlansPerCountry ente.BillingPlansPerCountry
 	CommonBillCtrl         *commonbilling.Controller
 }
 
 const UPStorePackageName = "io.up.ente.photos"
 
-// Return a new instance of PlayStoreController
+// Return a new instance of UPStoreController
 func NewUPStoreController(
-	plans ente.BillingPlansPerCountry,
 	billingRepo *repo.BillingRepository,
 	fileRepo *repo.FileRepository,
 	userRepo *repo.UserRepository,
-	storageBonusRepo *storagebonus.Repository,
 	commonBillCtrl *commonbilling.Controller,
 ) *UPStoreController {
 
 	return &UPStoreController{
-		BillingRepo:            billingRepo,
-		FileRepo:               fileRepo,
-		UserRepo:               userRepo,
-		BillingPlansPerCountry: plans,
-		StorageBonusRepo:       storageBonusRepo,
-		CommonBillCtrl:         commonBillCtrl,
+		BillingRepo:    billingRepo,
+		FileRepo:       fileRepo,
+		UserRepo:       userRepo,
+		CommonBillCtrl: commonBillCtrl,
 	}
-}
-func newUPStoreClient() (*playstore.Client, error) {
-	playStoreCredentialsFile, err := config.CredentialFilePath("pst-service-account.json")
-	if err != nil {
-		return nil, stacktrace.Propagate(err, "")
-	}
-	if playStoreCredentialsFile == "" {
-		// Can happen when running locally
-		return nil, nil
-	}
-
-	jsonKey, err := os.ReadFile(playStoreCredentialsFile)
-	if err != nil {
-		return nil, stacktrace.Propagate(err, "")
-	}
-	playStoreClient, err := playstore.New(jsonKey)
-	if err != nil {
-		return nil, stacktrace.Propagate(err, "")
-	}
-
-	return playStoreClient, nil
 }
 
 // GetVerifiedSubscription verifies and returns the verified subscription
-func (c *UPStoreController) GetVerifiedSubscription(userID int64) (ente.Subscription, error) {
-	var s ente.Subscription
+func (c *UPStoreController) GetVerifiedSubscription(userID int64) (UpSubscriptionDetails, error) {
 
 	user, err := c.UserRepo.Get(userID)
-
-	response, err := c.verifySubscriptionByUsername(user.Email)
-	if err != nil {
-		return ente.Subscription{}, stacktrace.Propagate(err, "")
+	var upUsername = user.Email
+	if at := strings.Index(upUsername, "@"); at != -1 {
+		upUsername = upUsername[:at]
 	}
 
-	s.UserID = userID
-	s.PaymentProvider = UnpluggedProvider
-	s.ProductID = response.PriceId
-	s.OriginalTransactionID = response.ID
-	s.ExpiryTime = response.ExpirationDate.UnixMicro()
-	return s, nil
+	response, err := c.verifySubscriptionByUsername(upUsername)
+	if err != nil {
+		return UpSubscriptionDetails{}, stacktrace.Propagate(err, "")
+	}
+
+	return response, nil
 }
 
 func (c *UPStoreController) verifySubscriptionByUsername(username string) (UpSubscriptionDetails, error) {
-	urlSubscriptionInner := viper.GetString("unplugged-subscription.inner-api-host")
+	urlSubscriptionInner := viper.GetString("unplugged.inner-api-host")
 	client := &http.Client{
 		Timeout: 10 * time.Second,
 	}
@@ -110,10 +79,10 @@ func (c *UPStoreController) verifySubscriptionByUsername(username string) (UpSub
 		)
 	}
 
-	var newSubscription UpSubscriptionDetails
-	err = json.NewDecoder(resp.Body).Decode(&newSubscription)
+	var newUPSubscription []UpSubscriptionDetails
+	err = json.NewDecoder(resp.Body).Decode(&newUPSubscription)
 	if err != nil {
 		return UpSubscriptionDetails{}, stacktrace.Propagate(err, "failed to decode response")
 	}
-	return newSubscription, nil
+	return newUPSubscription[0], nil
 }

@@ -58,26 +58,6 @@ func (h *UPBillingHandler) GetUserPlans(c *gin.Context) {
 	})
 }
 
-// GetUsage returns the storage usage for the requesting user
-func (h *UPBillingHandler) GetUsage(c *gin.Context) {
-	userID := auth.GetUserID(c.Request.Header)
-	usage, err := h.Controller.GetUsage(c.Request.Context(), userID)
-	if err != nil {
-		handler.Error(c, stacktrace.Propagate(err, "Failed to get usage"))
-		return
-	}
-
-	log.Info(log.Fields{
-		"user_id": userID,
-		"req_id":  requestid.Get(c),
-		"usage":   usage,
-	})
-
-	c.JSON(http.StatusOK, gin.H{
-		"usage": usage,
-	})
-}
-
 // VerifySubscription verifies and returns the verified subscription
 func (h *UPBillingHandler) VerifySubscription(c *gin.Context) {
 	userID := auth.GetUserID(c.Request.Header)
@@ -86,7 +66,7 @@ func (h *UPBillingHandler) VerifySubscription(c *gin.Context) {
 		handler.Error(c, stacktrace.Propagate(err, ""))
 		return
 	}
-	subscription, err := h.Controller.UPVerifySubscription(userID, request.ProductID)
+	subscription, err := h.Controller.UPVerifySubscription(userID)
 	if err != nil {
 		handler.Error(c, stacktrace.Propagate(err, ""))
 		return
