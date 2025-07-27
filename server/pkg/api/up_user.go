@@ -27,17 +27,6 @@ func (h *UPUserHandler) SendOTT(c *gin.Context) {
 	var emailHost = viper.GetString("unplugged.email-host")
 	// Validate JWT token
 	authToken := c.GetHeader("Authorization")
-	if authToken == "" {
-		handler.Error(c, stacktrace.Propagate(ente.NewBadRequestWithMessage("Authorization header is required"), ""))
-		return
-	}
-
-	// Validate the token
-	_, err := h.JWTValidator.ValidateToken(authToken)
-	if err != nil {
-		handler.Error(c, stacktrace.Propagate(err, "Error validating token: X"+authToken+"X"))
-		return
-	}
 
 	var request ente.SendOTTRequest
 	if err := c.ShouldBindJSON(&request); err != nil {
@@ -52,7 +41,7 @@ func (h *UPUserHandler) SendOTT(c *gin.Context) {
 	}
 
 	if request.Purpose == ente.SignUpOTTPurpose {
-		err = h.UserController.SendEmailOTT(c, username, request.Purpose)
+		err := h.UserController.SendEmailOTT(c, username, request.Purpose)
 		if err != nil {
 			handler.Error(c, stacktrace.Propagate(err, ""))
 			return
@@ -64,7 +53,10 @@ func (h *UPUserHandler) SendOTT(c *gin.Context) {
 	app := auth.GetApp(c)
 	otts, _ := h.UserController.UserAuthRepo.GetValidOTTs(usernameHash, app)
 	if len(otts) > 0 {
-		h.UserController.UserAuthRepo.RemoveOTT(usernameHash, otts[0], app)
+		err := h.UserController.UserAuthRepo.RemoveOTT(usernameHash, otts[0], app)
+		if err != nil {
+			return
+		}
 	}
 	response, err := h.UserController.OnVerificationSuccess(c, username, &source)
 	if err != nil {

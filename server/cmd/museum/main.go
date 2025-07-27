@@ -361,6 +361,11 @@ func main() {
 		Repo:     passkeysRepo,
 		UserRepo: userRepo,
 	}
+	// Initialize JWT validator
+	jwtValidator, err := auth.NewJWTValidator()
+	if err != nil {
+		log.Fatalf("Failed to initialize JWT validator: %v", err)
+	}
 
 	authMiddleware := middleware.AuthMiddleware{UserAuthRepo: userAuthRepo, Cache: authCache, UserController: userController}
 	accessTokenMiddleware := middleware.AccessTokenMiddleware{
@@ -371,6 +376,7 @@ func main() {
 		BillingCtrl:          billingController,
 		DiscordController:    discordController,
 	}
+	upAccessTokenMiddleware := middleware.UPAccessTokenMiddleware{JWTValidator: jwtValidator, Cache: accessTokenCache}
 
 	if environment != "local" {
 		gin.SetMode(gin.ReleaseMode)
@@ -398,6 +404,8 @@ func main() {
 
 	privateAPI := server.Group("/")
 	privateAPI.Use(rateLimiter.GlobalRateLimiter(), authMiddleware.TokenAuthMiddleware(nil), rateLimiter.APIRateLimitForUserMiddleware(urlSanitizer))
+	upPrivateAPI := server.Group("/")
+	upPrivateAPI.Use(rateLimiter.GlobalRateLimiter(), upAccessTokenMiddleware.UPAccessTokenAuthMiddleware(), rateLimiter.APIRateLimitForUserMiddleware(urlSanitizer))
 
 	adminAPI := server.Group("/admin")
 	adminAPI.Use(rateLimiter.GlobalRateLimiter(), authMiddleware.TokenAuthMiddleware(nil), authMiddleware.AdminAuthMiddleware())
@@ -488,12 +496,6 @@ func main() {
 		LockCtrl:          lockController,
 	}
 
-	// Initialize JWT validator
-	jwtValidator, err := auth.NewJWTValidator()
-	if err != nil {
-		log.Fatalf("Failed to initialize JWT validator: %v", err)
-	}
-
 	// Initialize Unplugged billing controller and handler
 	upBillingController := controller.NewUPBillingController(
 		billingRepo,
@@ -508,7 +510,7 @@ func main() {
 		UPBillingController: upBillingController,
 		UPStoreController:   upStoreController,
 	}
-	publicAPI.POST("/users/up/ott", upUserHandler.SendOTT)
+	upPrivateAPI.POST("/users/up/ott", upUserHandler.SendOTT)
 
 	userHandler := &api.UserHandler{
 		UserController:      userController,
