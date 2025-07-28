@@ -295,7 +295,7 @@ webauthn:
     # Whitelist of origins from where we will accept WebAuthn requests.
     # See: https://github.com/go-webauthn/webauthn
     rporigins:
-        - "http://localhost:3001"
+      - "https://unplugged.com"
 
 # Discord config (optional)
 # Use case: Devops
