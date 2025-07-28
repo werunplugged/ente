@@ -151,11 +151,12 @@ func main() {
 	}, []string{"method"})
 
 	s3Config := s3config.NewS3Config()
+	log.Info("s3Config passed")
 	passkeysRepo, err := passkey.NewRepository(db)
 	if err != nil {
 		panic(err)
 	}
-
+	log.Info("passkeysRepo passed")
 	storagBonusRepo := &storageBonusRepo.Repository{DB: db}
 	castDb := castRepo.Repository{DB: db}
 	userRepo := &repo.UserRepository{DB: db, SecretEncryptionKey: secretEncryptionKeyBytes, HashingKey: hashingKeyBytes, StorageBonusRepo: storagBonusRepo, PasskeysRepository: passkeysRepo}
