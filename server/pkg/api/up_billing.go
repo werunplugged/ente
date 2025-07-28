@@ -106,30 +106,3 @@ func (h *UPBillingHandler) GetSubscription(c *gin.Context) {
 		"subscription": subscription,
 	})
 }
-
-// CancelSubscription cancels the user's subscription
-func (h *UPBillingHandler) CancelSubscription(c *gin.Context) {
-	userID := auth.GetUserID(c.Request.Header)
-	token := c.GetHeader("Authorization")
-
-	// Extract the token from the Authorization header (Bearer token)
-	if len(token) > 7 && token[:7] == "Bearer " {
-		token = token[7:]
-	}
-
-	err := h.Controller.CancelSubscription(c.Request.Context(), userID, token)
-	if err != nil {
-		handler.Error(c, stacktrace.Propagate(err, "Failed to cancel subscription"))
-		return
-	}
-
-	log.Info(log.Fields{
-		"user_id": userID,
-		"req_id":  requestid.Get(c),
-		"message": "Subscription cancelled successfully",
-	})
-
-	c.JSON(http.StatusOK, gin.H{
-		"message": "Subscription cancelled successfully",
-	})
-}

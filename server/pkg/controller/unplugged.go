@@ -21,8 +21,6 @@ type UPStoreController struct {
 	CommonBillCtrl         *commonbilling.Controller
 }
 
-const UPStorePackageName = "io.up.ente.photos"
-
 // Return a new instance of UPStoreController
 func NewUPStoreController(
 	billingRepo *repo.BillingRepository,

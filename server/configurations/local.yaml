@@ -92,6 +92,9 @@ apps:
     family:
 unplugged:
   inner-api-host: http://host.docker.internal:8577
+  email-host: matrix.unpluggedsystems.app
+  basic-plan-id: 63075533e186f8edf2078157
+
 
 # Database connection parameters
 db:

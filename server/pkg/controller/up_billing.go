@@ -29,9 +29,6 @@ const (
 	FreePlanID    = "BASIC"
 	PremiumPlanID = "PREMIUM"
 
-	// Products ID
-	FreePlanProductID = "63075533e186f8edf2078157"
-
 	// Payment provider
 	UnpluggedProvider ente.PaymentProvider = "unplugged"
 
@@ -111,7 +108,8 @@ func (c *UPBillingController) GetFreePlan() ente.FreePlan {
 // VerifySubscription verifies and returns the verified subscription
 func (c *UPBillingController) UPVerifySubscription(
 	userID int64) (ente.Subscription, error) {
-
+	// Basic (free) Products ID
+	FreePlanProductID := viper.GetString("unplugged.basic-plan-id")
 	var newSubscription ente.Subscription
 	var err error
 	newUPSubscription, err := c.UPStoreController.GetVerifiedSubscription(userID)
