@@ -83,6 +83,7 @@ func getPlansIN() ente.BillingPlansPerCountry {
 
 func parsePricingFile(fileName string) ente.BillingPlansPerCountry {
 	filePath, err := config.BillingConfigFilePath(fileName)
+	logrus.Infof("Billing config file path: %s", filePath)
 	if err != nil {
 		logrus.Fatalf("Error getting billing config file: %v", err)
 	}
