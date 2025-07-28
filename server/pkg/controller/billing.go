@@ -461,6 +461,8 @@ func (c *BillingController) getPlanForCountry(s ente.Subscription, countryCode s
 			return plan, nil
 		} else if (s.PaymentProvider == ente.BitPay || s.PaymentProvider == ente.Paypal) && subProductID == plan.ID {
 			return plan, nil
+		} else if s.PaymentProvider == ente.Unplugged && subProductID == plan.StripeID {
+			return plan, nil
 		}
 	}
 	if s.ProductID == ente.FreePlanProductID || s.ProductID == ente.FamilyPlanProductID {

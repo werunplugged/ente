@@ -90,6 +90,11 @@ apps:
     accounts:
     # Default is https://family.ente.io
     family:
+unplugged:
+  inner-api-host: http://host.docker.internal:8577
+  email-host: matrix.unpluggedsystems.app
+  basic-plan-id: 63075533e186f8edf2078157
+
 
 # Database connection parameters
 db:
@@ -215,7 +220,7 @@ key:
 # JWT secrets
 #
 # See: [Note: Self hosting credentials] above.
-#
+#unplugged
 jwt:
   secret: Xy4kP8vN2mLqW9cRfTjHbA3zE5nUgYdS7iBwCMZQ1hk=
   public-key: |

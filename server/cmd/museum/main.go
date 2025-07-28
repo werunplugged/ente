@@ -100,6 +100,10 @@ func main() {
 	viper.SetDefault("apps.accounts", "https://accounts.ente.io")
 	viper.SetDefault("apps.cast", "https://cast.ente.io")
 	viper.SetDefault("apps.family", "https://family.ente.io")
+	viper.SetDefault("unplugged.api-host", "https://up-app-dev.unpluggedsystems.app")
+	viper.SetDefault("unplugged.inner-api-host", "https://up-app-dev.unpluggedsystems.app")
+	viper.SetDefault("unplugged.email-host", "msg.unpluggedsystems.app")
+	viper.SetDefault("unplugged.basic-plane-id", "free")
 
 	setupLogger(environment)
 	log.Infof("Booting up %s server with commit #%s", environment, os.Getenv("GIT_COMMIT"))
@@ -220,6 +224,8 @@ func main() {
 		billingRepo, userRepo, usageRepo, storagBonusRepo, commonBillController)
 	pushController := controller.NewPushController(pushRepo, taskLockingRepo, hostName)
 	mailingListsController := controller.NewMailingListsController()
+
+	upStoreController := controller.NewUPStoreController(billingRepo, fileRepo, userRepo, commonBillController)
 
 	storageBonusCtrl := &storagebonus.Controller{
 		UserRepo:                    userRepo,
@@ -356,6 +362,11 @@ func main() {
 		Repo:     passkeysRepo,
 		UserRepo: userRepo,
 	}
+	// Initialize JWT validator
+	jwtValidator, err := auth.NewJWTValidator()
+	if err != nil {
+		log.Fatalf("Failed to initialize JWT validator: %v", err)
+	}
 
 	authMiddleware := middleware.AuthMiddleware{UserAuthRepo: userAuthRepo, Cache: authCache, UserController: userController}
 	accessTokenMiddleware := middleware.AccessTokenMiddleware{
@@ -366,6 +377,7 @@ func main() {
 		BillingCtrl:          billingController,
 		DiscordController:    discordController,
 	}
+	upAccessTokenMiddleware := middleware.UPAccessTokenMiddleware{JWTValidator: jwtValidator, Cache: accessTokenCache}
 
 	if environment != "local" {
 		gin.SetMode(gin.ReleaseMode)
@@ -393,6 +405,8 @@ func main() {
 
 	privateAPI := server.Group("/")
 	privateAPI.Use(rateLimiter.GlobalRateLimiter(), authMiddleware.TokenAuthMiddleware(nil), rateLimiter.APIRateLimitForUserMiddleware(urlSanitizer))
+	upPrivateAPI := server.Group("/")
+	upPrivateAPI.Use(rateLimiter.GlobalRateLimiter(), upAccessTokenMiddleware.UPAccessTokenAuthMiddleware(), rateLimiter.APIRateLimitForUserMiddleware(urlSanitizer))
 
 	adminAPI := server.Group("/admin")
 	adminAPI.Use(rateLimiter.GlobalRateLimiter(), authMiddleware.TokenAuthMiddleware(nil), authMiddleware.AdminAuthMiddleware())
@@ -483,17 +497,21 @@ func main() {
 		LockCtrl:          lockController,
 	}
 
-	// Initialize JWT validator
-	jwtValidator, err := auth.NewJWTValidator()
-	if err != nil {
-		log.Fatalf("Failed to initialize JWT validator: %v", err)
-	}
+	// Initialize Unplugged billing controller and handler
+	upBillingController := controller.NewUPBillingController(
+		billingRepo,
+		userRepo,
+		usageRepo,
+		upStoreController,
+	)
 
 	upUserHandler := &api.UPUserHandler{
-		UserController: userController,
-		JWTValidator:   jwtValidator,
+		UserController:      userController,
+		JWTValidator:        jwtValidator,
+		UPBillingController: upBillingController,
+		UPStoreController:   upStoreController,
 	}
-	publicAPI.POST("/users/up/ott", upUserHandler.SendOTT)
+	upPrivateAPI.POST("/users/up/ott", upUserHandler.SendOTT)
 
 	userHandler := &api.UserHandler{
 		UserController:      userController,
@@ -667,6 +685,17 @@ func main() {
 		PlayStoreController: playStoreController,
 		StripeController:    stripeController,
 	}
+
+	upBillingHandler := &api.UPBillingHandler{
+		Controller: upBillingController,
+	}
+	// Unplugged billing endpoints
+	publicAPI.GET("/billing/up/plans/v2", upBillingHandler.GetPlansV2)
+	privateAPI.GET("/billing/up/user-plans", upBillingHandler.GetUserPlans)
+	privateAPI.GET("/billing/up/subscription", upBillingHandler.GetSubscription)
+	privateAPI.POST("/billing/up/verify-subscription", upBillingHandler.VerifySubscription)
+	//--------------------------------------
+
 	publicAPI.GET("/billing/plans/v2", billingHandler.GetPlansV2)
 	privateAPI.GET("/billing/user-plans", billingHandler.GetUserPlans)
 	privateAPI.GET("/billing/usage", billingHandler.GetUsage)
