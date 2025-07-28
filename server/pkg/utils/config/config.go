@@ -27,6 +27,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"github.com/sirupsen/logrus"
 	"os"
 	"strings"
 
@@ -153,11 +154,13 @@ func BillingConfigFilePath(name string) (string, error) {
 	}
 
 	path := billingConfigDir + name
+	logrus.Infof("BillingConfigFilePath config file path: %s", name)
 	return productionFilePath(path)
 }
 
 func productionFilePath(path string) (string, error) {
 	pathExists, err := doesFileExist(path)
+	logrus.Infof("productionFilePath pathExists: %v", pathExists)
 	if err != nil {
 		return "", stacktrace.Propagate(err, "")
 	}
