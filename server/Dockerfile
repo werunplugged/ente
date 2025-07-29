@@ -26,5 +26,5 @@ COPY --from=builder /go/bin/dlv /
 
 ARG GIT_COMMIT
 ENV GIT_COMMIT=$GIT_COMMIT
-EXPOSE 40000
-CMD ["/dlv", "--listen=:40000", "--headless=true", "--api-version=2", "exec", "./museum"]
+
+CMD ["/dlv", "--listen=:5006", "--headless=true", "--api-version=2", "exec", "./museum"]
