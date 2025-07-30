@@ -82,7 +82,6 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 	ginprometheus "github.com/zsais/go-gin-prometheus"
-	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 func main() {
@@ -861,25 +860,13 @@ func setupLogger(environment string) {
 		funcName := s[len(s)-1]
 		return funcName, fmt.Sprintf("%s:%d", path.Base(f.File), f.Line)
 	}
-	logFile := viper.GetString("log-file")
-	if environment == "local" && logFile == "" {
-		log.SetFormatter(&log.TextFormatter{
-			CallerPrettyfier: callerPrettyfier,
-			DisableQuote:     true,
-			ForceColors:      true,
-		})
-	} else {
-		log.SetFormatter(&log.JSONFormatter{
-			CallerPrettyfier: callerPrettyfier,
-			PrettyPrint:      false,
-		})
-		log.SetOutput(&lumberjack.Logger{
-			Filename: logFile,
-			MaxSize:  100,
-			MaxAge:   30,
-			Compress: true,
-		})
-	}
+
+	log.SetFormatter(&log.TextFormatter{
+		CallerPrettyfier: callerPrettyfier,
+		DisableQuote:     true,
+		ForceColors:      true,
+	})
+
 }
 
 func setupDatabase() *sql.DB {

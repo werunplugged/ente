@@ -11,9 +11,7 @@ RUN go mod download
 
 COPY . .
 RUN --mount=type=cache,target=/root/.cache/go-build \
-  go build -gcflags "all=-N -l" -o museum cmd/museum/main.go
- # Install Delve
-RUN go install github.com/go-delve/delve/cmd/dlv@latest
+  go build -o museum cmd/museum/main.go
 
 FROM alpine:3.21
 COPY --from=builder /usr/lib/libsodium.so* /usr/lib
@@ -22,9 +20,7 @@ COPY configurations configurations
 COPY migrations migrations
 COPY mail-templates mail-templates
 COPY web-templates web-templates
-COPY --from=builder /go/bin/dlv /
 
 ARG GIT_COMMIT
 ENV GIT_COMMIT=$GIT_COMMIT
-
-CMD ["/dlv", "--listen=:5006", "--headless=true", "--api-version=2", "exec", "./museum"]
+CMD ["./museum"]
