@@ -861,13 +861,12 @@ func setupLogger(environment string) {
 		return funcName, fmt.Sprintf("%s:%d", path.Base(f.File), f.Line)
 	}
 	logFile := viper.GetString("log-file")
-	if environment == "local" && logFile == "" || environment == "local_prod" {
-		log.SetFormatter(&log.TextFormatter{
-			CallerPrettyfier: callerPrettyfier,
-			DisableQuote:     true,
-			ForceColors:      true,
-		})
-	} else {
+	log.SetFormatter(&log.TextFormatter{
+		CallerPrettyfier: callerPrettyfier,
+		DisableQuote:     true,
+		ForceColors:      true,
+	})
+	if environment != "local" && logFile != "" {
 		log.SetFormatter(&log.JSONFormatter{
 			CallerPrettyfier: callerPrettyfier,
 			PrettyPrint:      false,
