@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/ente-io/museum/pkg/controller/collections"
 	"github.com/ente-io/museum/pkg/utils/auth"
+	"gopkg.in/natefinch/lumberjack.v2"
 	"net/http"
 	"os"
 	"os/signal"
@@ -89,7 +90,7 @@ func main() {
 	if environment == "" {
 		environment = "local"
 	}
-
+	setupLogger(environment)
 	err := config.ConfigureViper(environment)
 	if err != nil {
 		panic(err)
@@ -104,7 +105,6 @@ func main() {
 	viper.SetDefault("unplugged.email-host", "msg.unpluggedsystems.app")
 	viper.SetDefault("unplugged.basic-plane-id", "free")
 
-	setupLogger(environment)
 	log.Infof("Booting up %s server with commit #%s", environment, os.Getenv("GIT_COMMIT"))
 
 	secretEncryptionKey := viper.GetString("key.encryption")
@@ -860,13 +860,25 @@ func setupLogger(environment string) {
 		funcName := s[len(s)-1]
 		return funcName, fmt.Sprintf("%s:%d", path.Base(f.File), f.Line)
 	}
-
-	log.SetFormatter(&log.TextFormatter{
-		CallerPrettyfier: callerPrettyfier,
-		DisableQuote:     true,
-		ForceColors:      true,
-	})
-
+	logFile := viper.GetString("log-file")
+	if environment == "local" && logFile == "" || environment == "local_prod" {
+		log.SetFormatter(&log.TextFormatter{
+			CallerPrettyfier: callerPrettyfier,
+			DisableQuote:     true,
+			ForceColors:      true,
+		})
+	} else {
+		log.SetFormatter(&log.JSONFormatter{
+			CallerPrettyfier: callerPrettyfier,
+			PrettyPrint:      false,
+		})
+		log.SetOutput(&lumberjack.Logger{
+			Filename: logFile,
+			MaxSize:  100,
+			MaxAge:   30,
+			Compress: true,
+		})
+	}
 }
 
 func setupDatabase() *sql.DB {
