@@ -72,7 +72,6 @@ func NewRepository(
 ) (repo *Repository, err error) {
 	rpId := viper.GetString("webauthn.rpid")
 	rpOrigins := viper.GetStringSlice("webauthn.rporigins")
-	logrus.Infof("RP ID: %s, rpOrigins %s", rpId, rpOrigins)
 	wconfig := &webauthn.Config{
 		RPDisplayName: "Ente",
 		RPID:          rpId,

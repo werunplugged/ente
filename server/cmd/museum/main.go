@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/ente-io/museum/pkg/controller/collections"
 	"github.com/ente-io/museum/pkg/utils/auth"
+	"gopkg.in/natefinch/lumberjack.v2"
 	"net/http"
 	"os"
 	"os/signal"
@@ -82,7 +83,6 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 	ginprometheus "github.com/zsais/go-gin-prometheus"
-	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 func main() {
@@ -90,7 +90,6 @@ func main() {
 	if environment == "" {
 		environment = "local"
 	}
-
 	err := config.ConfigureViper(environment)
 	if err != nil {
 		panic(err)
@@ -105,9 +104,8 @@ func main() {
 	viper.SetDefault("unplugged.email-host", "msg.unpluggedsystems.app")
 	viper.SetDefault("unplugged.basic-plane-id", "free")
 
-	setupLogger(environment)
 	log.Infof("Booting up %s server with commit #%s", environment, os.Getenv("GIT_COMMIT"))
-
+	setupLogger(environment)
 	secretEncryptionKey := viper.GetString("key.encryption")
 	hashingKey := viper.GetString("key.hash")
 	jwtSecret := viper.GetString("jwt.secret")
@@ -151,12 +149,11 @@ func main() {
 	}, []string{"method"})
 
 	s3Config := s3config.NewS3Config()
-	log.Info("s3Config passed")
 	passkeysRepo, err := passkey.NewRepository(db)
 	if err != nil {
 		panic(err)
 	}
-	log.Info("passkeysRepo passed")
+
 	storagBonusRepo := &storageBonusRepo.Repository{DB: db}
 	castDb := castRepo.Repository{DB: db}
 	userRepo := &repo.UserRepository{DB: db, SecretEncryptionKey: secretEncryptionKeyBytes, HashingKey: hashingKeyBytes, StorageBonusRepo: storagBonusRepo, PasskeysRepository: passkeysRepo}
@@ -862,13 +859,12 @@ func setupLogger(environment string) {
 		return funcName, fmt.Sprintf("%s:%d", path.Base(f.File), f.Line)
 	}
 	logFile := viper.GetString("log-file")
-	if environment == "local" && logFile == "" {
-		log.SetFormatter(&log.TextFormatter{
-			CallerPrettyfier: callerPrettyfier,
-			DisableQuote:     true,
-			ForceColors:      true,
-		})
-	} else {
+	log.SetFormatter(&log.TextFormatter{
+		CallerPrettyfier: callerPrettyfier,
+		DisableQuote:     true,
+		ForceColors:      true,
+	})
+	if environment != "local" && logFile != "" {
 		log.SetFormatter(&log.JSONFormatter{
 			CallerPrettyfier: callerPrettyfier,
 			PrettyPrint:      false,

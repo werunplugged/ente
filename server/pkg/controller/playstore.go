@@ -45,7 +45,7 @@ func NewPlayStoreController(
 ) *PlayStoreController {
 	playStoreClient, err := newPlayStoreClient()
 	if err != nil {
-		log.Fatal(err)
+		log.Error(err)
 	}
 	// We don't do nil checks for playStoreClient in the definitions of these
 	// methods - if they're getting called, that means we're not in a test

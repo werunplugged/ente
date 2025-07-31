@@ -27,12 +27,10 @@ package config
 import (
 	"errors"
 	"fmt"
-	"github.com/sirupsen/logrus"
-	"os"
-	"strings"
-
 	"github.com/ente-io/stacktrace"
 	"github.com/spf13/viper"
+	"os"
+	"strings"
 )
 
 func ConfigureViper(environment string) error {
@@ -154,13 +152,11 @@ func BillingConfigFilePath(name string) (string, error) {
 	}
 
 	path := billingConfigDir + name
-	logrus.Infof("BillingConfigFilePath config file path: %s", name)
 	return productionFilePath(path)
 }
 
 func productionFilePath(path string) (string, error) {
 	pathExists, err := doesFileExist(path)
-	logrus.Infof("productionFilePath pathExists: %v", pathExists)
 	if err != nil {
 		return "", stacktrace.Propagate(err, "")
 	}
