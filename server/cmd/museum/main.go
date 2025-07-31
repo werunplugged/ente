@@ -90,7 +90,6 @@ func main() {
 	if environment == "" {
 		environment = "local"
 	}
-	setupLogger(environment)
 	err := config.ConfigureViper(environment)
 	if err != nil {
 		panic(err)
@@ -106,7 +105,7 @@ func main() {
 	viper.SetDefault("unplugged.basic-plane-id", "free")
 
 	log.Infof("Booting up %s server with commit #%s", environment, os.Getenv("GIT_COMMIT"))
-
+	setupLogger(environment)
 	secretEncryptionKey := viper.GetString("key.encryption")
 	hashingKey := viper.GetString("key.hash")
 	jwtSecret := viper.GetString("jwt.secret")
@@ -150,12 +149,11 @@ func main() {
 	}, []string{"method"})
 
 	s3Config := s3config.NewS3Config()
-	log.Info("s3Config passed")
 	passkeysRepo, err := passkey.NewRepository(db)
 	if err != nil {
 		panic(err)
 	}
-	log.Info("passkeysRepo passed")
+
 	storagBonusRepo := &storageBonusRepo.Repository{DB: db}
 	castDb := castRepo.Repository{DB: db}
 	userRepo := &repo.UserRepository{DB: db, SecretEncryptionKey: secretEncryptionKeyBytes, HashingKey: hashingKeyBytes, StorageBonusRepo: storagBonusRepo, PasskeysRepository: passkeysRepo}
