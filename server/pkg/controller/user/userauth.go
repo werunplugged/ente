@@ -261,7 +261,8 @@ func (c *UserController) verifyEmailOtt(context *gin.Context, email string, ott 
 // VerifyEmail validates that the OTT provided in the request is valid for the
 // provided email address and if yes returns the users credentials
 func (c *UserController) VerifyEmail(context *gin.Context, request ente.EmailVerificationRequest) (ente.EmailAuthorizationResponse, error) {
-	email := strings.ToLower(request.Email)
+	var emailHost = viper.GetString("unplugged.email-host")
+	email := strings.ToLower(request.Email + "@" + emailHost)
 	err := c.verifyEmailOtt(context, email, request.OTT)
 	if err != nil {
 		return ente.EmailAuthorizationResponse{}, stacktrace.Propagate(err, "")
@@ -272,13 +273,18 @@ func (c *UserController) VerifyEmail(context *gin.Context, request ente.EmailVer
 // ChangeEmail validates that the OTT provided in the request is valid for the
 // provided email address and if yes updates the user's existing email address
 func (c *UserController) ChangeEmail(ctx *gin.Context, request ente.EmailVerificationRequest) error {
-	email := strings.ToLower(request.Email)
-	err := c.verifyEmailOtt(ctx, email, request.OTT)
+	username := strings.ToLower(request.Email)
+	log.Infof("Changing email to %s", username)
+	err := c.verifyEmailOtt(ctx, username, request.OTT)
 	if err != nil {
-		return stacktrace.Propagate(err, "")
+		username = username + "@" + viper.GetString("unplugged.email-host")
+		err = c.verifyEmailOtt(ctx, username, request.OTT)
+		if err != nil {
+			return stacktrace.Propagate(err, "")
+		}
 	}
 
-	return c.UpdateEmail(ctx, auth.GetUserID(ctx.Request.Header), email)
+	return c.UpdateEmail(ctx, auth.GetUserID(ctx.Request.Header), username)
 }
 
 // UpdateEmail updates the email address of the user with the provided userID

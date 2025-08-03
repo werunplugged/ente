@@ -333,3 +333,70 @@ func (c *UPBillingController) CancelSubscription(ctx context.Context, userID int
 
 	return nil
 }
+
+// HandleSubscriptionWebhook processes webhook notifications for subscription events
+func (c *UPBillingController) HandleSubscriptionWebhook(ctx context.Context, payload []byte) error {
+	// Parse the webhook payload
+	var webhookData map[string]interface{}
+	if err := json.Unmarshal(payload, &webhookData); err != nil {
+		return stacktrace.Propagate(err, "Failed to unmarshal webhook payload")
+	}
+
+	// Extract event type and subscription data
+	eventType, ok := webhookData["event"].(string)
+	if !ok {
+		return stacktrace.NewError("Missing or invalid event type in webhook payload")
+	}
+
+	log.WithFields(log.Fields{
+		"event_type": eventType,
+		"payload":    string(payload),
+	}).Info("Received subscription webhook")
+
+	// Process different event types
+	switch eventType {
+	case "subscription.created":
+		return c.handleSubscriptionCreated(ctx, webhookData)
+	case "subscription.updated":
+		return c.handleSubscriptionUpdated(ctx, webhookData)
+	case "subscription.cancelled":
+		return c.handleSubscriptionCancelled(ctx, webhookData)
+	case "subscription.renewed":
+		return c.handleSubscriptionRenewed(ctx, webhookData)
+	default:
+		log.WithField("event_type", eventType).Info("Unhandled webhook event type")
+		return nil // Return success for unhandled event types
+	}
+}
+
+// handleSubscriptionCreated processes subscription.created events
+func (c *UPBillingController) handleSubscriptionCreated(ctx context.Context, data map[string]interface{}) error {
+	// Implementation would extract user ID and subscription details from the webhook data
+	// and update the user's subscription in the database
+	log.Info("Processing subscription.created event")
+	return nil
+}
+
+// handleSubscriptionUpdated processes subscription.updated events
+func (c *UPBillingController) handleSubscriptionUpdated(ctx context.Context, data map[string]interface{}) error {
+	// Implementation would extract user ID and updated subscription details from the webhook data
+	// and update the user's subscription in the database
+	log.Info("Processing subscription.updated event")
+	return nil
+}
+
+// handleSubscriptionCancelled processes subscription.cancelled events
+func (c *UPBillingController) handleSubscriptionCancelled(ctx context.Context, data map[string]interface{}) error {
+	// Implementation would extract user ID from the webhook data
+	// and mark the user's subscription as cancelled in the database
+	log.Info("Processing subscription.cancelled event")
+	return nil
+}
+
+// handleSubscriptionRenewed processes subscription.renewed events
+func (c *UPBillingController) handleSubscriptionRenewed(ctx context.Context, data map[string]interface{}) error {
+	// Implementation would extract user ID and renewed subscription details from the webhook data
+	// and update the user's subscription in the database
+	log.Info("Processing subscription.renewed event")
+	return nil
+}

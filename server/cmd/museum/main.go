@@ -692,6 +692,20 @@ func main() {
 	privateAPI.GET("/billing/up/user-plans", upBillingHandler.GetUserPlans)
 	privateAPI.GET("/billing/up/subscription", upBillingHandler.GetSubscription)
 	privateAPI.POST("/billing/up/verify-subscription", upBillingHandler.VerifySubscription)
+
+	// Unplugged webhook endpoints
+	upWebhookHandler := &api.UPWebhookHandler{
+		Controller: upBillingController,
+	}
+
+	// Create webhook signature verification middleware
+	webhookSecret := viper.GetString("unplugged.webhook-secret")
+	webhookMiddleware := &middleware.WebhookSignatureMiddleware{
+		Secret: webhookSecret,
+	}
+
+	// Register webhook endpoint with signature verification middleware
+	publicAPI.POST("/webhooks/up/subscriptions", webhookMiddleware.VerifySignature(), upWebhookHandler.HandleSubscriptionWebhook)
 	//--------------------------------------
 
 	publicAPI.GET("/billing/plans/v2", billingHandler.GetPlansV2)
