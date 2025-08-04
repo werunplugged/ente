@@ -335,27 +335,19 @@ func (c *UPBillingController) CancelSubscription(ctx context.Context, userID int
 }
 
 // HandleSubscriptionWebhook processes webhook notifications for subscription events
-func (c *UPBillingController) HandleSubscriptionWebhook(ctx context.Context, payload []byte) error {
+func (c *UPBillingController) HandleSubscriptionWebhook(reqBody *ente.WebhookRequest) error {
 	// Parse the webhook payload
-	var webhookData map[string]interface{}
-	if err := json.Unmarshal(payload, &webhookData); err != nil {
-		return stacktrace.Propagate(err, "Failed to unmarshal webhook payload")
-	}
 
 	// Extract event type and subscription data
-	eventType, ok := webhookData["event"].(string)
-	if !ok {
-		return stacktrace.NewError("Missing or invalid event type in webhook payload")
-	}
+	event := reqBody.Event
 
 	log.WithFields(log.Fields{
-		"event_type": eventType,
-		"payload":    string(payload),
+		"payload": event,
 	}).Info("Received subscription webhook")
 
 	// Process different event types
 
-	err := c.handleSubscriptionUpdated(ctx, webhookData)
+	err := c.handleSubscriptionUpdated(reqBody)
 	if err != nil {
 		return err
 	}
@@ -363,11 +355,11 @@ func (c *UPBillingController) HandleSubscriptionWebhook(ctx context.Context, pay
 }
 
 // handleSubscriptionUpdated processes subscription.updated events
-func (c *UPBillingController) handleSubscriptionUpdated(ctx context.Context, data map[string]interface{}) error {
+func (c *UPBillingController) handleSubscriptionUpdated(reqBody *ente.WebhookRequest) error {
 	// Implementation would extract user ID and updated subscription details from the webhook data
 	// and update the user's subscription in the database
 	log.Info("Processing subscription.updated event")
-	username := data["username"].(string)
+	username := reqBody.Username
 	emailHash, err := crypto.GetHash(username, c.HashingKey)
 	user, err := c.UserRepo.GetUserByEmailHash(emailHash)
 	_, err = c.UPVerifySubscription(user.ID)

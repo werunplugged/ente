@@ -1,7 +1,7 @@
 package api
 
 import (
-	"io"
+	"github.com/ente-io/museum/ente"
 	"net/http"
 
 	"github.com/ente-io/museum/pkg/controller"
@@ -20,14 +20,14 @@ type UPWebhookHandler struct {
 // HandleSubscriptionWebhook processes subscription webhook notifications
 func (h *UPWebhookHandler) HandleSubscriptionWebhook(c *gin.Context) {
 	// Read the request body
-	body, err := io.ReadAll(c.Request.Body)
-	if err != nil {
-		handler.Error(c, stacktrace.Propagate(err, "Failed to read request body"))
+	var reqBody ente.WebhookRequest
+	if err := c.ShouldBindJSON(&reqBody); err != nil {
+		handler.Error(c, stacktrace.Propagate(err, ""))
 		return
 	}
 
 	// Process the webhook notification
-	err = h.Controller.HandleSubscriptionWebhook(c.Request.Context(), body)
+	err := h.Controller.HandleSubscriptionWebhook(&reqBody)
 	if err != nil {
 		log.WithFields(log.Fields{
 			"req_id": requestid.Get(c),
