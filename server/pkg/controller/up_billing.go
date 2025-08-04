@@ -373,12 +373,13 @@ func (c *UPBillingController) handleSubscriptionUpdated(reqBody *ente.WebhookReq
 	if err != nil {
 		// If user not found, try with email format (username@domain)
 		emailUsername := username + "@" + viper.GetString("unplugged.email-host")
-		emailHash, err = crypto.GetHash(emailUsername, c.HashingKey)
-		if err != nil {
+		emailHashAlt, errAlt := crypto.GetHash(emailUsername, c.HashingKey)
+		if errAlt != nil {
 			return stacktrace.Propagate(err, "failed to hash email username")
 		}
 
-		user, err = c.UserRepo.GetUserByEmailHash(emailHash)
+		emailUser, err := c.UserRepo.GetUserByEmailHash(emailHashAlt)
+		_, err = c.UPVerifySubscription(emailUser.ID)
 		if err != nil {
 			return stacktrace.Propagate(err, "failed to find user by email hash")
 		}
