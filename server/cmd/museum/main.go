@@ -501,6 +501,7 @@ func main() {
 		userRepo,
 		usageRepo,
 		upStoreController,
+		hashingKeyBytes,
 	)
 
 	upUserHandler := &api.UPUserHandler{

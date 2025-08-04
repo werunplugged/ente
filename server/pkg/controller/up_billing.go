@@ -7,8 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/ente-io/museum/pkg/controller/commonbilling"
-	"github.com/ente-io/museum/pkg/controller/discord"
-	"github.com/ente-io/museum/pkg/controller/email"
+	"github.com/ente-io/museum/pkg/utils/crypto"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 	"net/http"
@@ -54,13 +53,12 @@ type UpSubscriptionDetails struct {
 
 // UPBillingController provides abstractions for handling Unplugged billing related queries
 type UPBillingController struct {
-	BillingRepo           *repo.BillingRepository
-	UserRepo              *repo.UserRepository
-	UsageRepo             *repo.UsageRepository
-	UPStoreController     *UPStoreController
-	CommonBillCtrl        *commonbilling.Controller
-	EmailNotificationCtrl *email.EmailNotificationController
-	DiscordController     *discord.DiscordController
+	BillingRepo       *repo.BillingRepository
+	UserRepo          *repo.UserRepository
+	UsageRepo         *repo.UsageRepository
+	UPStoreController *UPStoreController
+	CommonBillCtrl    *commonbilling.Controller
+	HashingKey        []byte
 }
 
 // NewUPBillingController returns a new instance of UPBillingController
@@ -69,12 +67,14 @@ func NewUPBillingController(
 	userRepo *repo.UserRepository,
 	usageRepo *repo.UsageRepository,
 	upStoreController *UPStoreController,
+	hashingKey []byte,
 ) *UPBillingController {
 	return &UPBillingController{
 		BillingRepo:       billingRepo,
 		UserRepo:          userRepo,
 		UsageRepo:         usageRepo,
 		UPStoreController: upStoreController,
+		HashingKey:        hashingKey,
 	}
 }
 
@@ -354,26 +354,11 @@ func (c *UPBillingController) HandleSubscriptionWebhook(ctx context.Context, pay
 	}).Info("Received subscription webhook")
 
 	// Process different event types
-	switch eventType {
-	case "subscription.created":
-		return c.handleSubscriptionCreated(ctx, webhookData)
-	case "subscription.updated":
-		return c.handleSubscriptionUpdated(ctx, webhookData)
-	case "subscription.cancelled":
-		return c.handleSubscriptionCancelled(ctx, webhookData)
-	case "subscription.renewed":
-		return c.handleSubscriptionRenewed(ctx, webhookData)
-	default:
-		log.WithField("event_type", eventType).Info("Unhandled webhook event type")
-		return nil // Return success for unhandled event types
-	}
-}
 
-// handleSubscriptionCreated processes subscription.created events
-func (c *UPBillingController) handleSubscriptionCreated(ctx context.Context, data map[string]interface{}) error {
-	// Implementation would extract user ID and subscription details from the webhook data
-	// and update the user's subscription in the database
-	log.Info("Processing subscription.created event")
+	err := c.handleSubscriptionUpdated(ctx, webhookData)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -382,21 +367,12 @@ func (c *UPBillingController) handleSubscriptionUpdated(ctx context.Context, dat
 	// Implementation would extract user ID and updated subscription details from the webhook data
 	// and update the user's subscription in the database
 	log.Info("Processing subscription.updated event")
-	return nil
-}
-
-// handleSubscriptionCancelled processes subscription.cancelled events
-func (c *UPBillingController) handleSubscriptionCancelled(ctx context.Context, data map[string]interface{}) error {
-	// Implementation would extract user ID from the webhook data
-	// and mark the user's subscription as cancelled in the database
-	log.Info("Processing subscription.cancelled event")
-	return nil
-}
-
-// handleSubscriptionRenewed processes subscription.renewed events
-func (c *UPBillingController) handleSubscriptionRenewed(ctx context.Context, data map[string]interface{}) error {
-	// Implementation would extract user ID and renewed subscription details from the webhook data
-	// and update the user's subscription in the database
-	log.Info("Processing subscription.renewed event")
+	username := data["username"].(string)
+	emailHash, err := crypto.GetHash(username, c.HashingKey)
+	user, err := c.UserRepo.GetUserByEmailHash(emailHash)
+	_, err = c.UPVerifySubscription(user.ID)
+	if err != nil {
+		return err
+	}
 	return nil
 }
