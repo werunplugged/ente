@@ -356,15 +356,39 @@ func (c *UPBillingController) HandleSubscriptionWebhook(reqBody *ente.WebhookReq
 
 // handleSubscriptionUpdated processes subscription.updated events
 func (c *UPBillingController) handleSubscriptionUpdated(reqBody *ente.WebhookRequest) error {
-	// Implementation would extract user ID and updated subscription details from the webhook data
+	// Extract user ID and updated subscription details from the webhook data
 	// and update the user's subscription in the database
 	log.Info("Processing subscription.updated event")
+
+	// Get username from webhook request
 	username := reqBody.Username
+
+	// Try to find user by username
 	emailHash, err := crypto.GetHash(username, c.HashingKey)
+	if err != nil {
+		return stacktrace.Propagate(err, "failed to hash username")
+	}
+
 	user, err := c.UserRepo.GetUserByEmailHash(emailHash)
+	if err != nil {
+		// If user not found, try with email format (username@domain)
+		emailUsername := username + "@" + viper.GetString("unplugged.email-host")
+		emailHash, err = crypto.GetHash(emailUsername, c.HashingKey)
+		if err != nil {
+			return stacktrace.Propagate(err, "failed to hash email username")
+		}
+
+		user, err = c.UserRepo.GetUserByEmailHash(emailHash)
+		if err != nil {
+			return stacktrace.Propagate(err, "failed to find user by email hash")
+		}
+	}
+
+	// Verify and update the subscription for the user
 	_, err = c.UPVerifySubscription(user.ID)
 	if err != nil {
-		return err
+		return stacktrace.Propagate(err, "failed to verify subscription for user")
 	}
+
 	return nil
 }

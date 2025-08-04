@@ -570,8 +570,8 @@ func (h *UserHandler) GetSRPAttributes(c *gin.Context) {
 	var username = request.Email
 	response, err := h.UserController.GetSRPAttributes(c, username)
 	if err != nil {
-		username = username + "@" + emailHost
-		response, err = h.UserController.GetSRPAttributes(c, username)
+		emailUsername := username + "@" + emailHost
+		response, err = h.UserController.GetSRPAttributes(c, emailUsername)
 		if err != nil {
 			handler.Error(c, stacktrace.Propagate(err, ""))
 		}

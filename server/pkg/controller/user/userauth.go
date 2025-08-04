@@ -277,8 +277,8 @@ func (c *UserController) ChangeEmail(ctx *gin.Context, request ente.EmailVerific
 	log.Infof("Changing email to %s", username)
 	err := c.verifyEmailOtt(ctx, username, request.OTT)
 	if err != nil {
-		username = username + "@" + viper.GetString("unplugged.email-host")
-		err = c.verifyEmailOtt(ctx, username, request.OTT)
+		emailUsername := username + "@" + viper.GetString("unplugged.email-host")
+		err = c.verifyEmailOtt(ctx, emailUsername, request.OTT)
 		if err != nil {
 			return stacktrace.Propagate(err, "")
 		}
