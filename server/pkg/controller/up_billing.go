@@ -362,24 +362,32 @@ func (c *UPBillingController) handleSubscriptionUpdated(reqBody *ente.WebhookReq
 
 	// Get username from webhook request
 	username := reqBody.Username
-
+	log.Infof("reqBody.Username: %s", username)
 	// Try to find user by username
 	emailHash, err := crypto.GetHash(username, c.HashingKey)
+	log.Infof("reqBody.Username: %s", username)
 	if err != nil {
 		return stacktrace.Propagate(err, "failed to hash username")
 	}
 
 	user, err := c.UserRepo.GetUserByEmailHash(emailHash)
+
 	if err != nil {
 		// If user not found, try with email format (username@domain)
+		log.Infof("user not found c.UserRepo.GetUserByEmailHash(emailHash): %s", err)
 		emailUsername := username + "@" + viper.GetString("unplugged.email-host")
+		log.Infof("emailUsername: %s", emailUsername)
 		emailHashAlt, errAlt := crypto.GetHash(emailUsername, c.HashingKey)
+		log.Infof("emailHashAlt: %s", emailHashAlt)
 		if errAlt != nil {
 			return stacktrace.Propagate(err, "failed to hash email username")
 		}
-		emailUser, err := c.UserRepo.GetUserByEmailHash(emailHashAlt)
-		_, err = c.UPVerifySubscription(emailUser.ID)
-		if err != nil {
+		emailUser, errUser := c.UserRepo.GetUserByEmailHash(emailHashAlt)
+		if errUser != nil {
+		}
+		log.Infof("emailUser: %s", emailUser)
+		_, errVerify := c.UPVerifySubscription(emailUser.ID)
+		if errVerify != nil {
 			return stacktrace.Propagate(err, "failed to find user by email hash")
 		} else {
 			// Verify and update the subscription for the user
