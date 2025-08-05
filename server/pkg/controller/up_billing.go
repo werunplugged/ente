@@ -6,13 +6,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
+	"strconv"
+	"time"
+
 	"github.com/ente-io/museum/pkg/controller/commonbilling"
 	"github.com/ente-io/museum/pkg/utils/crypto"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
-	"net/http"
-	"strconv"
-	"time"
 
 	"github.com/ente-io/museum/ente"
 	"github.com/ente-io/museum/pkg/repo"
@@ -202,7 +203,7 @@ func convertSubscription(userID int64, newSubscription *ente.Subscription, newUP
 	newSubscription.ProductID = newUPSubscription.Price
 	newSubscription.Storage = PremiumPlanStorage
 	newSubscription.OriginalTransactionID = newUPSubscription.ID
-	newSubscription.Price = fmt.Sprintf("%.2f", newUPSubscription.Price)
+	newSubscription.Price = newUPSubscription.Price
 	newSubscription.Attributes.IsCancelled = newUPSubscription.EndReason == "CANCELLED"
 }
 
@@ -390,12 +391,12 @@ func (c *UPBillingController) handleSubscriptionUpdated(reqBody *ente.WebhookReq
 		_, errVerify := c.UPVerifySubscription(emailUser.ID)
 		if errVerify != nil {
 			return stacktrace.Propagate(err, "failed to verify subscription for user")
-		} else {
-			// Verify and update the subscription for the user
-			_, err = c.UPVerifySubscription(user.ID)
-			if err != nil {
-				return stacktrace.Propagate(err, "failed to verify subscription for user")
-			}
+		}
+	} else {
+		// Verify and update the subscription for the user
+		_, err = c.UPVerifySubscription(user.ID)
+		if err != nil {
+			return stacktrace.Propagate(err, "failed to verify subscription for user")
 		}
 	}
 
