@@ -377,18 +377,17 @@ func (c *UPBillingController) handleSubscriptionUpdated(reqBody *ente.WebhookReq
 		if errAlt != nil {
 			return stacktrace.Propagate(err, "failed to hash email username")
 		}
-
 		emailUser, err := c.UserRepo.GetUserByEmailHash(emailHashAlt)
 		_, err = c.UPVerifySubscription(emailUser.ID)
 		if err != nil {
 			return stacktrace.Propagate(err, "failed to find user by email hash")
+		} else {
+			// Verify and update the subscription for the user
+			_, err = c.UPVerifySubscription(user.ID)
+			if err != nil {
+				return stacktrace.Propagate(err, "failed to verify subscription for user")
+			}
 		}
-	}
-
-	// Verify and update the subscription for the user
-	_, err = c.UPVerifySubscription(user.ID)
-	if err != nil {
-		return stacktrace.Propagate(err, "failed to verify subscription for user")
 	}
 
 	return nil
