@@ -7,6 +7,7 @@ import (
 	"github.com/ente-io/museum/pkg/controller/commonbilling"
 	"github.com/ente-io/museum/pkg/repo"
 	"github.com/ente-io/stacktrace"
+	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 	"net/http"
 	"strings"
@@ -42,8 +43,10 @@ func (c *UPStoreController) GetVerifiedSubscription(userID int64) (UpSubscriptio
 
 	user, err := c.UserRepo.Get(userID)
 	var upUsername = user.Email
+	log.Info("UP username: ", upUsername)
 	if at := strings.Index(upUsername, "@"); at != -1 {
 		upUsername = upUsername[:at]
+		log.Info("UP username: ", upUsername)
 	}
 
 	response, err := c.verifySubscriptionByUsername(upUsername)
@@ -76,7 +79,7 @@ func (c *UPStoreController) verifySubscriptionByUsername(username string) (UpSub
 			"failed to verify subscription",
 		)
 	}
-
+	log.Info("UP response: ", resp.Body)
 	var newUPSubscription []UpSubscriptionDetails
 	err = json.NewDecoder(resp.Body).Decode(&newUPSubscription)
 	if err != nil {
