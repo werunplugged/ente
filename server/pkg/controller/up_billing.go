@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/ente-io/museum/pkg/controller/commonbilling"
+	"github.com/ente-io/museum/pkg/utils/billing"
 	"github.com/ente-io/museum/pkg/utils/crypto"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
@@ -117,22 +118,35 @@ func (c *UPBillingController) UPVerifySubscription(
 	if err != nil {
 		return ente.Subscription{}, stacktrace.Propagate(err, "failed to get verified subscription")
 	}
-
-	if newUPSubscription.Type == FreePlanID {
-		subscription, errSub := c.BillingRepo.GetUserSubscription(userID)
-		if errSub != nil {
-			return ente.Subscription{}, stacktrace.Propagate(err, "")
-		}
-		if subscription.ProductID == ente.FreePlanProductID || subscription.ProductID == FreePlanProductID {
-			return subscription, nil
-		}
-		return ente.Subscription{}, stacktrace.Propagate(ente.ErrCannotDowngrade, "")
-	}
-
-	currentSubscription, err := c.BillingRepo.GetUserSubscription(userID)
-	if err != nil {
+	log.Infof("New subscription details newUPSubscription.Type: %s", newUPSubscription.Type)
+	currentSubscription, errSub := c.BillingRepo.GetUserSubscription(userID)
+	if errSub != nil {
 		return ente.Subscription{}, stacktrace.Propagate(err, "")
 	}
+	log.Infof("Current subscription details currenSubscription.Type: %s", currentSubscription.ProductID)
+
+	if newUPSubscription.Type == FreePlanID {
+
+		if currentSubscription.ProductID == ente.FreePlanProductID || currentSubscription.ProductID == FreePlanProductID {
+			return currentSubscription, nil
+		} else {
+			newFreeSubscription := billing.GetFreeSubscription(userID)
+			err = c.BillingRepo.ReplaceSubscription(
+				currentSubscription.ID,
+				newFreeSubscription,
+			)
+			if err != nil {
+				return ente.Subscription{}, stacktrace.Propagate(err, "")
+			}
+			log.Info("Replaced subscription")
+			newSubscription.ID = currentSubscription.ID
+
+			log.Info("Returning new subscription with ID " + strconv.FormatInt(newSubscription.ID, 10))
+			return newSubscription, nil
+		}
+
+	}
+
 	convertSubscription(userID, &newSubscription, &newUPSubscription, currentSubscription)
 
 	newSubscriptionExpiresSooner := newSubscription.ExpiryTime < currentSubscription.ExpiryTime
@@ -390,8 +404,8 @@ func (c *UPBillingController) handleSubscriptionUpdated(reqBody *ente.WebhookReq
 		log.Infof("emailUser username: %s, ID: %s", emailUser.Email, emailUser.ID)
 		_, errVerify := c.UPVerifySubscription(emailUser.ID)
 		if errVerify != nil {
-			log.Errorf("failed to verify subscription for user: %s, Err: %s", emailUser.Email, err)
-			return stacktrace.Propagate(err, "failed to verify subscription for user")
+			log.Errorf("failed to verify subscription for emailUser: %s, Err: %s", emailUser.Email, err)
+			return stacktrace.Propagate(err, "failed to verify subscription for emailUser")
 		}
 	} else {
 		// Verify and update the subscription for the user

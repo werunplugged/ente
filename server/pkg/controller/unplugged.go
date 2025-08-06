@@ -3,15 +3,16 @@ package controller
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"strings"
+	"time"
+
 	"github.com/ente-io/museum/ente"
 	"github.com/ente-io/museum/pkg/controller/commonbilling"
 	"github.com/ente-io/museum/pkg/repo"
 	"github.com/ente-io/stacktrace"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
-	"net/http"
-	"strings"
-	"time"
 )
 
 type UPStoreController struct {
@@ -50,6 +51,7 @@ func (c *UPStoreController) GetVerifiedSubscription(userID int64) (UpSubscriptio
 	}
 
 	response, err := c.verifySubscriptionByUsername(upUsername)
+	log.Info("c.verifySubscriptionByUsername(upUsername) response: ", response)
 	if err != nil {
 		return UpSubscriptionDetails{}, stacktrace.Propagate(err, "")
 	}
