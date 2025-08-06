@@ -65,6 +65,8 @@ func (m *WebhookSignatureMiddleware) VerifySignature() gin.HandlerFunc {
 
 // generateSignature generates a signature for the given payload using HMAC-SHA256
 func generateSignature(payload, secret string) (string, error) {
+	//TODO Remove secret from here
+	logrus.Infof("Generating signature for payload: %s, secret %s", payload, secret)
 	h := hmac.New(sha256.New, []byte(secret))
 	_, err := h.Write([]byte(payload))
 	if err != nil {
