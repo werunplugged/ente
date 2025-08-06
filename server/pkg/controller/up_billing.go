@@ -35,7 +35,7 @@ const (
 	// Unplugged API endpoints
 	UnpluggedSubscriptionDetailsEndpoint = "/api/subscriptions/v2/details"
 	UnpluggedSubscriptionCancelEndpoint  = "/api/subscriptions/v2/cancel"
-	UnpluggedGetUserSubscriptionEndpoint = "/inner/by-username?username="
+	UnpluggedGetUserSubscriptionEndpoint = "/inner/v2/by-username?username="
 )
 
 // UpSubscriptionDetails represents the response from Unplugged subscription details endpoint
