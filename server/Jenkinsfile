@@ -34,7 +34,7 @@ pipeline {
         stage('Deploy') {
             steps {
                 echo "deploying image ${IMAGE_URL}"
-                build job: '/Build/service_installer', parameters: [validatingString(name: 'IMAGE_URL', value: "${IMAGE_URL}")]
+                build job: '/Build/service_installer_tests', parameters: [validatingString(name: 'IMAGE_URL', value: "${IMAGE_URL}")]
             }
         }
     }
