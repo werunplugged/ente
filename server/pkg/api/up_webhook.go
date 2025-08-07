@@ -1,8 +1,9 @@
 package api
 
 import (
-	"github.com/ente-io/museum/ente"
 	"net/http"
+
+	"github.com/ente-io/museum/ente"
 
 	"github.com/ente-io/museum/pkg/controller"
 	"github.com/ente-io/museum/pkg/utils/handler"
@@ -14,7 +15,7 @@ import (
 
 // UPWebhookHandler handles webhook requests for Unplugged subscriptions
 type UPWebhookHandler struct {
-	Controller *controller.UPBillingController
+	UpBillingController *controller.UPBillingController
 }
 
 // HandleSubscriptionWebhook processes subscription webhook notifications
@@ -27,7 +28,7 @@ func (h *UPWebhookHandler) HandleSubscriptionWebhook(c *gin.Context) {
 	}
 
 	// Process the webhook notification
-	err := h.Controller.HandleSubscriptionWebhook(&reqBody)
+	err := h.UpBillingController.HandleSubscriptionWebhook(&reqBody)
 	if err != nil {
 		log.WithFields(log.Fields{
 			"req_id": requestid.Get(c),

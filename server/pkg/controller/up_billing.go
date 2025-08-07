@@ -1,14 +1,10 @@
 package controller
 
 import (
-	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/ente-io/museum/pkg/controller/commonbilling"
 	"github.com/ente-io/museum/pkg/utils/billing"
@@ -22,36 +18,12 @@ import (
 )
 
 const (
-	// Storage sizes in bytes
-	FreePlanStorage    int64 = 10 * 1024 * 1024 * 1024   // 10GB
-	PremiumPlanStorage int64 = 1000 * 1024 * 1024 * 1024 // 1TB
-
-	// Plan IDs
-	FreePlanID    = "BASIC"
-	PremiumPlanID = "PREMIUM"
-
-	// Payment provider
-	UnpluggedProvider ente.PaymentProvider = "unplugged"
 
 	// Unplugged API endpoints
-	UnpluggedSubscriptionDetailsEndpoint = "/api/subscriptions/v2/details"
-	UnpluggedSubscriptionCancelEndpoint  = "/api/subscriptions/v2/cancel"
 	UnpluggedGetUserSubscriptionEndpoint = "/inner/v2/by-username?username="
 )
 
 // UpSubscriptionDetails represents the response from Unplugged subscription details endpoint
-type UpSubscriptionDetails struct {
-	ID             string            `json:"subscriptionId"`
-	Type           string            `json:"type"`     // enum BASIC, PREMIUM
-	Interval       string            `json:"interval"` // YEAR, MONTH
-	Price          string            `json:"priceId"`
-	Currency       string            `json:"currency"`
-	Provider       string            `json:"provider"` // UNPLUGGED, STRIPE
-	Username       string            `json:"username"`
-	ExpirationDate time.Time         `json:"expirationDate"`
-	Metadata       map[string]string `json:"metadata"`
-	EndReason      string            `json:"endReason"`
-}
 
 // UPBillingController provides abstractions for handling Unplugged billing related queries
 type UPBillingController struct {
@@ -80,38 +52,12 @@ func NewUPBillingController(
 	}
 }
 
-// GetPlans returns the available Unplugged subscription plans
-func (c *UPBillingController) GetPlans() []ente.BillingPlan {
-	return []ente.BillingPlan{
-		{
-			ID:      FreePlanID,
-			Storage: FreePlanStorage,
-			Price:   "0",
-			Period:  ente.PeriodYear,
-		},
-		{
-			ID:      PremiumPlanID,
-			Storage: PremiumPlanStorage,
-			Price:   "9.99",
-			Period:  ente.PeriodYear,
-		},
-	}
-}
-
-// GetFreePlan returns the free plan details
-func (c *UPBillingController) GetFreePlan() ente.FreePlan {
-	return ente.FreePlan{
-		Storage:  FreePlanStorage,
-		Period:   ente.PeriodYear,
-		Duration: ente.TrialPeriodDuration,
-	}
-}
-
-// VerifySubscription verifies and returns the verified subscription
+// UPVerifySubscription verifies and returns the verified subscription
 func (c *UPBillingController) UPVerifySubscription(
 	userID int64) (ente.Subscription, error) {
 	// Basic (free) Products ID
 	FreePlanProductID := viper.GetString("unplugged.basic-plan-id")
+
 	var newSubscription ente.Subscription
 
 	newUPSubscription, err := c.UPStoreController.GetVerifiedSubscription(userID)
@@ -119,27 +65,28 @@ func (c *UPBillingController) UPVerifySubscription(
 		return ente.Subscription{}, stacktrace.Propagate(err, "failed to get verified subscription")
 	}
 	log.Infof("New subscription details newUPSubscription.Type: %s", newUPSubscription.Type)
-	currentSubscription, errSub := c.BillingRepo.GetUserSubscription(userID)
-	if errSub != nil {
+
+	currentEnteSubscription, errEnteSub := c.BillingRepo.GetUserSubscription(userID)
+	if errEnteSub != nil {
 		return ente.Subscription{}, stacktrace.Propagate(err, "")
 	}
-	log.Infof("Current subscription details currenSubscription.Type: %s", currentSubscription.ProductID)
+	log.Infof("Current subscription details currenSubscription.Type: %s", currentEnteSubscription.ProductID)
 
-	if newUPSubscription.Type == FreePlanID {
+	if newUPSubscription.Type == ente.FreePlanID {
 
-		if currentSubscription.ProductID == ente.FreePlanProductID || currentSubscription.ProductID == FreePlanProductID {
-			return currentSubscription, nil
+		if currentEnteSubscription.ProductID == ente.FreePlanProductID || currentEnteSubscription.ProductID == FreePlanProductID {
+			return currentEnteSubscription, nil
 		} else {
 			newFreeSubscription := billing.GetFreeSubscription(userID)
 			err = c.BillingRepo.ReplaceSubscription(
-				currentSubscription.ID,
+				currentEnteSubscription.ID,
 				newFreeSubscription,
 			)
 			if err != nil {
 				return ente.Subscription{}, stacktrace.Propagate(err, "")
 			}
 			log.Info("Replaced subscription")
-			newSubscription.ID = currentSubscription.ID
+			newSubscription.ID = currentEnteSubscription.ID
 
 			log.Info("Returning new subscription with ID " + strconv.FormatInt(newSubscription.ID, 10))
 			return newSubscription, nil
@@ -147,20 +94,20 @@ func (c *UPBillingController) UPVerifySubscription(
 
 	}
 
-	convertSubscription(userID, &newSubscription, &newUPSubscription, currentSubscription)
+	convertSubscription(userID, &newSubscription, &newUPSubscription, currentEnteSubscription)
 
-	newSubscriptionExpiresSooner := newSubscription.ExpiryTime < currentSubscription.ExpiryTime
-	isUpgradingFromFreePlan := currentSubscription.ProductID == ente.FreePlanProductID
-	hasChangedProductID := currentSubscription.ProductID != newSubscription.ProductID
+	newSubscriptionExpiresSooner := newSubscription.ExpiryTime < currentEnteSubscription.ExpiryTime
+	isUpgradingFromFreePlan := currentEnteSubscription.ProductID == ente.FreePlanProductID
+	hasChangedProductID := currentEnteSubscription.ProductID != newSubscription.ProductID
 	isOutdatedPurchase := !isUpgradingFromFreePlan && !hasChangedProductID && newSubscriptionExpiresSooner
 
 	if isOutdatedPurchase {
 		// User is reporting an outdated purchase that was already verified
 		// no-op
 		log.Info("Outdated purchase reported")
-		return currentSubscription, nil
+		return currentEnteSubscription, nil
 	}
-	if newSubscription.Storage < currentSubscription.Storage {
+	if newSubscription.Storage < currentEnteSubscription.Storage {
 		canDowngrade, canDowngradeErr := c.CommonBillCtrl.CanDowngradeToGivenStorage(newSubscription.Storage, userID)
 		if canDowngradeErr != nil {
 			return ente.Subscription{}, stacktrace.Propagate(canDowngradeErr, "")
@@ -171,7 +118,7 @@ func (c *UPBillingController) UPVerifySubscription(
 		log.Info("Usage is good")
 	}
 	if newSubscription.OriginalTransactionID != "" && newSubscription.OriginalTransactionID != "none" {
-		existingSub, existingSubErr := c.BillingRepo.GetSubscriptionForTransaction(newSubscription.OriginalTransactionID, UnpluggedProvider)
+		existingSub, existingSubErr := c.BillingRepo.GetSubscriptionForTransaction(newSubscription.OriginalTransactionID, ente.Unplugged)
 		if existingSubErr != nil {
 			if errors.Is(existingSubErr, sql.ErrNoRows) {
 				log.Info("No subscription created yet")
@@ -194,159 +141,31 @@ func (c *UPBillingController) UPVerifySubscription(
 		}
 	}
 	err = c.BillingRepo.ReplaceSubscription(
-		currentSubscription.ID,
+		currentEnteSubscription.ID,
 		newSubscription,
 	)
 	if err != nil {
 		return ente.Subscription{}, stacktrace.Propagate(err, "")
 	}
 	log.Info("Replaced subscription")
-	newSubscription.ID = currentSubscription.ID
+	newSubscription.ID = currentEnteSubscription.ID
 
 	log.Info("Returning new subscription with ID " + strconv.FormatInt(newSubscription.ID, 10))
 	return newSubscription, nil
 }
 
-func convertSubscription(userID int64, newSubscription *ente.Subscription, newUPSubscription *UpSubscriptionDetails,
+func convertSubscription(userID int64, newSubscription *ente.Subscription, newUPSubscription *ente.UpSubscriptionDetails,
 	currentSubscription ente.Subscription) {
 	newSubscription.ID = currentSubscription.ID
 	newSubscription.Period = newUPSubscription.Interval
-	newSubscription.PaymentProvider = UnpluggedProvider
+	newSubscription.PaymentProvider = ente.Unplugged
 	newSubscription.UserID = userID
 	newSubscription.ExpiryTime = newUPSubscription.ExpirationDate.UnixNano() / 1000
 	newSubscription.ProductID = newUPSubscription.Price
-	newSubscription.Storage = PremiumPlanStorage
+	newSubscription.Storage = ente.PremiumPlanStorage
 	newSubscription.OriginalTransactionID = newUPSubscription.ID
 	newSubscription.Price = newUPSubscription.Price
-	newSubscription.Attributes.IsCancelled = newUPSubscription.EndReason == "CANCELLED"
-}
-
-// GetUserPlans returns the available plans for a user
-func (c *UPBillingController) GetUserPlans(ctx context.Context, userID int64) ([]ente.BillingPlan, error) {
-	return c.GetPlans(), nil
-}
-
-// GetSubscription returns the current subscription for a user if any
-func (c *UPBillingController) GetSubscription(ctx context.Context, userID int64, token string) (ente.Subscription, error) {
-	subscription, err := c.BillingRepo.GetUserSubscription(userID)
-	if err != nil {
-		return ente.Subscription{}, stacktrace.Propagate(err, "")
-	}
-
-	// If the user doesn't have an Unplugged subscription, return the current subscription
-	if subscription.PaymentProvider != UnpluggedProvider {
-		return subscription, nil
-	}
-
-	// Get the latest subscription details from Unplugged
-	client := &http.Client{
-		Timeout: 10 * time.Second,
-	}
-	urlSubscriptionInner := viper.GetString("unplugged.inner-api-host")
-	req, err := http.NewRequest("GET", urlSubscriptionInner+UnpluggedSubscriptionDetailsEndpoint, nil)
-	if err != nil {
-		return subscription, stacktrace.Propagate(err, "failed to create request")
-	}
-
-	req.Header.Add("Authorization", "Bearer "+token)
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return subscription, stacktrace.Propagate(err, "failed to get subscription details")
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return subscription, stacktrace.Propagate(fmt.Errorf("unexpected status code: %d", resp.StatusCode), "")
-	}
-
-	var details UpSubscriptionDetails
-	if err := json.NewDecoder(resp.Body).Decode(&details); err != nil {
-		return subscription, stacktrace.Propagate(err, "failed to decode response")
-	}
-
-	// Update subscription based on the response
-	newSubscription := subscription
-
-	// Set storage based on subscription type
-	if details.Type == "PREMIUM" {
-		newSubscription.Storage = PremiumPlanStorage
-		newSubscription.ProductID = PremiumPlanID
-	} else {
-		newSubscription.Storage = FreePlanStorage
-		newSubscription.ProductID = FreePlanID
-	}
-
-	// Set expiry time based on interval
-	var expiryDuration time.Duration
-	if details.Interval == "YEAR" {
-		expiryDuration = 365 * 24 * time.Hour
-	} else {
-		expiryDuration = 30 * 24 * time.Hour
-	}
-
-	newSubscription.ExpiryTime = time.Now().Add(expiryDuration).UnixNano() / 1000
-	newSubscription.PaymentProvider = ente.PaymentProvider(details.Provider)
-	newSubscription.OriginalTransactionID = details.ID
-	newSubscription.Price = details.Price
-	newSubscription.Period = details.Interval
-
-	// Update the subscription in the database
-	err = c.BillingRepo.ReplaceSubscription(subscription.ID, newSubscription)
-	if err != nil {
-		return subscription, stacktrace.Propagate(err, "failed to update subscription")
-	}
-
-	return newSubscription, nil
-}
-
-// CancelSubscription cancels the user's subscription
-func (c *UPBillingController) CancelSubscription(ctx context.Context, userID int64, token string) error {
-	subscription, err := c.BillingRepo.GetUserSubscription(userID)
-	if err != nil {
-		return stacktrace.Propagate(err, "")
-	}
-
-	// If the user doesn't have an Unplugged subscription, return an error
-	if subscription.PaymentProvider != UnpluggedProvider {
-		return stacktrace.Propagate(fmt.Errorf("user does not have an Unplugged subscription"), "")
-	}
-
-	// Call Unplugged API to cancel subscription
-	client := &http.Client{
-		Timeout: 10 * time.Second,
-	}
-	urlSubscriptionInner := viper.GetString("unplugged.inner-api-host")
-
-	req, err := http.NewRequest("DELETE", urlSubscriptionInner+UnpluggedSubscriptionCancelEndpoint, nil)
-	if err != nil {
-		return stacktrace.Propagate(err, "failed to create request")
-	}
-
-	req.Header.Add("Authorization", "Bearer "+token)
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return stacktrace.Propagate(err, "failed to cancel subscription")
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return stacktrace.Propagate(fmt.Errorf("unexpected status code: %d", resp.StatusCode), "")
-	}
-
-	// Update subscription to free plan
-	newSubscription := subscription
-	newSubscription.Storage = FreePlanStorage
-	newSubscription.ProductID = FreePlanID
-	newSubscription.Attributes.IsCancelled = true
-
-	err = c.BillingRepo.ReplaceSubscription(subscription.ID, newSubscription)
-	if err != nil {
-		return stacktrace.Propagate(err, "failed to update subscription")
-	}
-
-	return nil
+	newSubscription.Attributes.IsCancelled = newUPSubscription.EndReason == "CANCELED"
 }
 
 // HandleSubscriptionWebhook processes webhook notifications for subscription events

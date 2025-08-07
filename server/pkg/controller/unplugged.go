@@ -40,7 +40,7 @@ func NewUPStoreController(
 }
 
 // GetVerifiedSubscription verifies and returns the verified subscription
-func (c *UPStoreController) GetVerifiedSubscription(userID int64) (UpSubscriptionDetails, error) {
+func (c *UPStoreController) GetVerifiedSubscription(userID int64) (ente.UpSubscriptionDetails, error) {
 
 	user, err := c.UserRepo.Get(userID)
 	var upUsername = user.Email
@@ -53,39 +53,39 @@ func (c *UPStoreController) GetVerifiedSubscription(userID int64) (UpSubscriptio
 	response, err := c.verifySubscriptionByUsername(upUsername)
 	log.Info("c.verifySubscriptionByUsername(upUsername) response: ", response)
 	if err != nil {
-		return UpSubscriptionDetails{}, stacktrace.Propagate(err, "")
+		return ente.UpSubscriptionDetails{}, stacktrace.Propagate(err, "")
 	}
 
 	return response, nil
 }
 
-func (c *UPStoreController) verifySubscriptionByUsername(username string) (UpSubscriptionDetails, error) {
+func (c *UPStoreController) verifySubscriptionByUsername(username string) (ente.UpSubscriptionDetails, error) {
 	urlSubscriptionInner := viper.GetString("unplugged.inner-api-host")
 	client := &http.Client{
 		Timeout: 10 * time.Second,
 	}
 	req, err := http.NewRequest("GET", urlSubscriptionInner+UnpluggedGetUserSubscriptionEndpoint+username, nil)
 	if err != nil {
-		return UpSubscriptionDetails{}, stacktrace.Propagate(err, "failed to create request")
+		return ente.UpSubscriptionDetails{}, stacktrace.Propagate(err, "failed to create request")
 	}
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return UpSubscriptionDetails{}, stacktrace.Propagate(err, "failed to execute request")
+		return ente.UpSubscriptionDetails{}, stacktrace.Propagate(err, "failed to execute request")
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return UpSubscriptionDetails{}, stacktrace.Propagate(
+		return ente.UpSubscriptionDetails{}, stacktrace.Propagate(
 			fmt.Errorf("unexpected status code: %d", resp.StatusCode),
 			"failed to verify subscription",
 		)
 	}
 	log.Info("UP response: ", resp.Body)
-	var newUPSubscription []UpSubscriptionDetails
+	var newUPSubscription []ente.UpSubscriptionDetails
 	err = json.NewDecoder(resp.Body).Decode(&newUPSubscription)
 	if err != nil {
-		return UpSubscriptionDetails{}, stacktrace.Propagate(err, "failed to decode response")
+		return ente.UpSubscriptionDetails{}, stacktrace.Propagate(err, "failed to decode response")
 	}
 	return newUPSubscription[0], nil
 }
