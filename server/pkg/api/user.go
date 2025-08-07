@@ -560,19 +560,25 @@ func (h *UserHandler) SelfAccountRecovery(c *gin.Context) {
 
 // GetSRPAttributes returns the SRP attributes for a user
 func (h *UserHandler) GetSRPAttributes(c *gin.Context) {
+	var emailHost = viper.GetString("unplugged.email-host")
 	var request ente.GetSRPAttributesRequest
 	if err := c.ShouldBindQuery(&request); err != nil {
 		handler.Error(c,
 			stacktrace.Propagate(ente.ErrBadRequest, fmt.Sprintf("Request binding failed %s", err)))
 		return
 	}
-	response, err := h.UserController.GetSRPAttributes(c, request.Email)
+	var username = request.Email
+	response, err := h.UserController.GetSRPAttributes(c, username)
 	if err != nil {
-		handler.Error(c, stacktrace.Propagate(err, ""))
-		return
+		emailUsername := username + "@" + emailHost
+		response, err = h.UserController.GetSRPAttributes(c, emailUsername)
+		if err != nil {
+			handler.Error(c, stacktrace.Propagate(err, ""))
+		}
+
 	}
 	logrus.WithFields(logrus.Fields{
-		"email":       request.Email,
+		"email":       username,
 		"srp_user_id": response.SRPUserID,
 	}).Info("Sending SRP attributes")
 	c.JSON(http.StatusOK, gin.H{"attributes": response})

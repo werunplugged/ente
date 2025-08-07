@@ -5,9 +5,6 @@ import (
 	"database/sql"
 	b64 "encoding/base64"
 	"fmt"
-	"github.com/ente-io/museum/pkg/controller/collections"
-	"github.com/ente-io/museum/pkg/utils/auth"
-	"gopkg.in/natefinch/lumberjack.v2"
 	"net/http"
 	"os"
 	"os/signal"
@@ -16,6 +13,10 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/ente-io/museum/pkg/controller/collections"
+	"github.com/ente-io/museum/pkg/utils/auth"
+	"gopkg.in/natefinch/lumberjack.v2"
 
 	"github.com/ente-io/museum/ente/base"
 	"github.com/ente-io/museum/pkg/controller/emergency"
@@ -501,6 +502,7 @@ func main() {
 		userRepo,
 		usageRepo,
 		upStoreController,
+		hashingKeyBytes,
 	)
 
 	upUserHandler := &api.UPUserHandler{
@@ -684,14 +686,19 @@ func main() {
 		StripeController:    stripeController,
 	}
 
-	upBillingHandler := &api.UPBillingHandler{
-		Controller: upBillingController,
+	// Unplugged webhook endpoints
+	upWebhookHandler := &api.UPWebhookHandler{
+		UpBillingController: upBillingController,
 	}
-	// Unplugged billing endpoints
-	publicAPI.GET("/billing/up/plans/v2", upBillingHandler.GetPlansV2)
-	privateAPI.GET("/billing/up/user-plans", upBillingHandler.GetUserPlans)
-	privateAPI.GET("/billing/up/subscription", upBillingHandler.GetSubscription)
-	privateAPI.POST("/billing/up/verify-subscription", upBillingHandler.VerifySubscription)
+
+	// Create webhook signature verification middleware
+	webhookSecret := viper.GetString("unplugged.webhook-secret")
+	webhookMiddleware := &middleware.WebhookSignatureMiddleware{
+		Secret: webhookSecret,
+	}
+
+	// Register webhook endpoint with signature verification middleware
+	publicAPI.POST("/webhooks/up/subscriptions", webhookMiddleware.VerifySignature(), upWebhookHandler.HandleSubscriptionWebhook)
 	//--------------------------------------
 
 	publicAPI.GET("/billing/plans/v2", billingHandler.GetPlansV2)
