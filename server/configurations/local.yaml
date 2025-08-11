@@ -91,9 +91,10 @@ apps:
     # Default is https://family.ente.io
     family:
 unplugged:
-  inner-api-host: http://host.docker.internal:8577
+  inner-api-host: http://host.docker.internal:8077
   email-host: matrix.unpluggedsystems.app
-  basic-plan-id: 63075533e186f8edf2078157
+  basic-plan-id: 6315ee8875bc091d4990b500
+  webhook-secret: BXm1wQHRt_2zXlT6sZX9KqQONnN6SUzbLUUFXwCeZJY
 
 
 # Database connection parameters
