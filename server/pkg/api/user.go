@@ -583,12 +583,14 @@ func (h *UserHandler) GetSRPAttributes(c *gin.Context) {
 		}).Info("Sending SRP attributes")
 		c.JSON(http.StatusOK, gin.H{"attributes": response})
 
+	} else {
+		logrus.WithFields(logrus.Fields{
+			"email":       username,
+			"srp_user_id": response.SRPUserID,
+		}).Info("Sending SRP attributes")
+		c.JSON(http.StatusOK, gin.H{"attributes": response})
 	}
-	logrus.WithFields(logrus.Fields{
-		"email":       username,
-		"srp_user_id": response.SRPUserID,
-	}).Info("Sending SRP attributes")
-	c.JSON(http.StatusOK, gin.H{"attributes": response})
+
 }
 
 // SetupSRP sets the SRP attributes for a user
