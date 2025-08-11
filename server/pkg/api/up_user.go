@@ -1,10 +1,11 @@
 package api
 
 import (
+	"net/http"
+
 	"github.com/ente-io/museum/pkg/controller"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
-	"net/http"
 
 	"github.com/ente-io/museum/ente"
 	"github.com/ente-io/museum/pkg/controller/user"
@@ -42,7 +43,7 @@ func (h *UPUserHandler) SendOTT(c *gin.Context) {
 		return
 	}
 
-	if request.Purpose == ente.SignUpOTTPurpose {
+	if request.Purpose == ente.SignUpOTTPurpose || request.Purpose == ente.LoginOTTPurpose {
 		err := h.UserController.SendEmailOTT(c, username, request.Purpose)
 		if err != nil {
 			handler.Error(c, stacktrace.Propagate(err, ""))
@@ -53,6 +54,7 @@ func (h *UPUserHandler) SendOTT(c *gin.Context) {
 		handler.Error(c, stacktrace.Propagate(ente.ErrBadRequest, "Invalid OTT purpose"))
 		return
 	}
+
 	source := "UP Store"
 
 	usernameHash, _ := crypto.GetHash(username, h.UserController.HashingKey)
