@@ -4,13 +4,14 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"net/http"
+	"strconv"
+	"strings"
+
 	"github.com/ente-io/museum/pkg/controller/emergency"
 	"github.com/gin-contrib/requestid"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
-	"net/http"
-	"strconv"
-	"strings"
 
 	"github.com/ente-io/museum/ente"
 	"github.com/ente-io/museum/ente/jwt"
@@ -570,11 +571,17 @@ func (h *UserHandler) GetSRPAttributes(c *gin.Context) {
 	var username = request.Email
 	response, err := h.UserController.GetSRPAttributes(c, username)
 	if err != nil {
+
 		emailUsername := username + "@" + emailHost
-		response, err = h.UserController.GetSRPAttributes(c, emailUsername)
-		if err != nil {
+		requestEmailUser, errEmailUser := h.UserController.GetSRPAttributes(c, emailUsername)
+		if errEmailUser != nil {
 			handler.Error(c, stacktrace.Propagate(err, ""))
 		}
+		logrus.WithFields(logrus.Fields{
+			"email":       emailUsername,
+			"srp_user_id": requestEmailUser.SRPUserID,
+		}).Info("Sending SRP attributes")
+		c.JSON(http.StatusOK, gin.H{"attributes": response})
 
 	}
 	logrus.WithFields(logrus.Fields{
