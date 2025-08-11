@@ -2,6 +2,7 @@ package api
 
 import (
 	"github.com/ente-io/museum/pkg/controller"
+	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 	"net/http"
 
@@ -33,8 +34,9 @@ func (h *UPUserHandler) SendOTT(c *gin.Context) {
 		handler.Error(c, stacktrace.Propagate(err, ""))
 		return
 	}
-	username, _ := h.JWTValidator.GetPreferredUsername(authToken)
-	username = username + "@" + emailHost
+	preferredUsername, _ := h.JWTValidator.GetPreferredUsername(authToken)
+	username := preferredUsername + "@" + emailHost
+	log.Infof("OTT Username: %s", username)
 	if len(username) == 0 {
 		handler.Error(c, stacktrace.Propagate(ente.ErrBadRequest, "Email id is missing"))
 		return
@@ -46,6 +48,10 @@ func (h *UPUserHandler) SendOTT(c *gin.Context) {
 			handler.Error(c, stacktrace.Propagate(err, ""))
 			return
 		}
+	} else {
+		log.Errorf("Current OTT Purpose: %s. It must be %s", request.Purpose, ente.SignUpOTTPurpose)
+		handler.Error(c, stacktrace.Propagate(ente.ErrBadRequest, "Invalid OTT purpose"))
+		return
 	}
 	source := "UP Store"
 
@@ -55,16 +61,18 @@ func (h *UPUserHandler) SendOTT(c *gin.Context) {
 	if len(otts) > 0 {
 		err := h.UserController.UserAuthRepo.RemoveOTT(usernameHash, otts[0], app)
 		if err != nil {
+
 			return
 		}
 	}
 	response, err := h.UserController.OnVerificationSuccess(c, username, &source)
 	if err != nil {
-		handler.Error(c, stacktrace.Propagate(err, ""))
+		handler.Error(c, stacktrace.Propagate(err, "h.UserController.OnVerificationSuccess failed"))
 		return
 	}
 	_, err = h.UPBillingController.UPVerifySubscription(response.ID)
 	if err != nil {
+		handler.Error(c, stacktrace.Propagate(err, "h.UPBillingController.UPVerifySubscription(response.ID) failed"))
 		return
 	}
 	c.JSON(http.StatusOK, response)
