@@ -45,7 +45,7 @@ android {
     sourceSets {
         main.java.srcDirs += 'src/main/kotlin'
     }
-    
+
     lintOptions {
         disable 'InvalidPackage'
         warningsAsErrors false
@@ -67,7 +67,7 @@ android {
 
     splits {
         abi {
-            enable  true
+            enable true
             reset()
             include 'arm64-v8a'
             universalApk false
@@ -75,25 +75,23 @@ android {
     }
 
     signingConfigs {
-       release {
-           storeFile keystoreProperties['storeFile'] ? file(keystoreProperties['storeFile']) : System.getenv("SIGNING_KEY_PATH") ? file(System.getenv("SIGNING_KEY_PATH")) : null
-           keyAlias keystoreProperties['keyAlias'] ? keystoreProperties['keyAlias'] : System.getenv("SIGNING_KEY_ALIAS")
-           keyPassword keystoreProperties['keyPassword'] ? keystoreProperties['keyPassword'] : System.getenv("SIGNING_KEY_PASSWORD")
-           storePassword keystoreProperties['storePassword'] ? keystoreProperties['storePassword'] : System.getenv("SIGNING_STORE_PASSWORD")
+        release {
+            storeFile keystoreProperties['storeFile'] ? file(keystoreProperties['storeFile']) : System.getenv("SIGNING_KEY_PATH") ? file(System.getenv("SIGNING_KEY_PATH")) : null
+            keyAlias keystoreProperties['keyAlias'] ? keystoreProperties['keyAlias'] : System.getenv("SIGNING_KEY_ALIAS")
+            keyPassword keystoreProperties['keyPassword'] ? keystoreProperties['keyPassword'] : System.getenv("SIGNING_KEY_PASSWORD")
+            storePassword keystoreProperties['storePassword'] ? keystoreProperties['storePassword'] : System.getenv("SIGNING_STORE_PASSWORD")
 
-       }
+        }
 
-        debug{
-            debug {
-                keyAlias 'up_dev_key'
-                keyPassword 'ntH_pmn23f$5'
-                storeFile file('./signature/up_dev.keystore')
-                storePassword 'ntH_pmn23f$5'
-                v2SigningEnabled true
-            }
+        debug {
+            keyAlias 'up_dev_key'
+            keyPassword 'ntH_pmn23f$5'
+            storeFile file('./signature/up_dev.keystore')
+            storePassword 'ntH_pmn23f$5'
+            v2SigningEnabled true
         }
     }
-    
+
     flavorDimensions "default"
     productFlavors {
         independent {
@@ -104,29 +102,29 @@ android {
             dimension "default"
 //            applicationIdSuffix ".dev"
         }
- //       playstore {
- //           dimension "default"
- //       }
- //       fdroid {
- //           dimension "default"//
- //           applicationIdSuffix ".fdroid"
- //       }
+        //       playstore {
+        //           dimension "default"
+        //       }
+        //       fdroid {
+        //           dimension "default"//
+        //           applicationIdSuffix ".fdroid"
+        //       }
     }
 
     buildTypes {
         release {
-            signingConfig signingConfigs.release
-            signingConfig signingConfigs.debug
-//            debuggable true
+            //signingConfig signingConfigs.release
+            //signingConfig signingConfigs.debug
+            //debuggable true
         }
         debug {
             debuggable true
-          versionNameSuffix "-debug"
-          externalNativeBuild {
-            cmake {
-              arguments "-DANDROID_PACKAGE_NAME=${android.defaultConfig.applicationId}${applicationIdSuffix}"
+            versionNameSuffix "-debug"
+            externalNativeBuild {
+                cmake {
+                    arguments "-DANDROID_PACKAGE_NAME=${android.defaultConfig.applicationId}${applicationIdSuffix}"
+                }
             }
-          }
         }
     }
 
@@ -146,8 +144,8 @@ rootProject.allprojects {
                 if (details.requested.group == 'com.github.bumptech.glide'
                         && details.requested.name.contains('glide')) {
                     details.useVersion "4.15.1"
+                }
             }
-          }
         }
     }
 }
@@ -157,7 +155,6 @@ flutter {
 }
 
 dependencies {
-    implementation 'io.sentry:sentry-android:2.0.0'
     implementation 'org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.8.21'
     implementation 'org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.0'
     implementation 'com.android.support:multidex:1.0.3'

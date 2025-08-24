@@ -9,7 +9,6 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:logging/logging.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:photos/core/constants.dart';
-import 'package:photos/core/error-reporting/super_logging.dart';
 import 'package:photos/core/event_bus.dart';
 import 'package:photos/db/collections_db.dart';
 import 'package:photos/db/files_db.dart';
@@ -114,7 +113,6 @@ class Configuration {
         }
         await _migrateSecurityStorageToFirstUnlock();
       }
-      SuperLogging.setUserID(await _getOrCreateAnonymousUserID()).ignore();
     } catch (e, s) {
       _logger.severe("Configuration init failed", e, s);
       /*

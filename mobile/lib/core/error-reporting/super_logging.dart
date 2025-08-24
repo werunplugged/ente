@@ -5,21 +5,16 @@ import 'dart:collection';
 import 'dart:core';
 import 'dart:io';
 
-import "package:dio/dio.dart";
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
-import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:logging/logging.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path/path.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:photos/core/error-reporting/tunneled_transport.dart';
-import "package:photos/core/errors.dart";
 import 'package:photos/models/typedefs.dart';
 import "package:photos/utils/device_info.dart";
 import "package:photos/utils/ram_check_util.dart";
-import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 extension SuperString on String {
@@ -62,31 +57,7 @@ extension SuperLogRecord on LogRecord {
 }
 
 class LogConfig {
-  /// The DSN for a Sentry app.
-  /// This can be obtained from the Sentry apps's "settings > Client Keys (DSN)" page.
-  ///
-  /// Only logs containing errors are sent to sentry.
-  /// Errors can be caught using a try-catch block, like so:
-  ///
-  /// ```
-  /// final logger = Logger("main");
-  ///
-  /// try {
-  ///   // do something dangerous here
-  /// } catch(e, trace) {
-  ///   logger.info("Huston, we have a problem", e, trace);
-  /// }
-  /// ```
-  ///
-  /// If this is [null], Sentry logger is completely disabled (default).
-  String? sentryDsn;
-
   String? tunnel;
-
-  /// A built-in retry mechanism for sending errors to sentry.
-  ///
-  /// This parameter defines the time to wait for, before retrying.
-  Duration sentryRetryDelay;
 
   /// Path of the directory where log files will be stored.
   ///
@@ -107,9 +78,6 @@ class LogConfig {
   int maxLogFiles;
 
   /// Whether to enable super logging features in debug mode.
-  ///
-  /// Sentry and file logging are typically not needed in debug mode,
-  /// where a complete logcat is available.
   bool enableInDebugMode;
 
   /// If provided, super logging will invoke this function, and
@@ -126,9 +94,7 @@ class LogConfig {
   String prefix;
 
   LogConfig({
-    this.sentryDsn,
     this.tunnel,
-    this.sentryRetryDelay = const Duration(seconds: 30),
     this.logDirPath,
     this.maxLogFiles = 10,
     this.enableInDebugMode = false,
@@ -161,43 +127,21 @@ class SuperLogging {
     appVersion ??= await getAppVersion();
     final isFDroidClient = await isFDroidBuild();
     if (isFDroidClient) {
-      appConfig.sentryDsn = null;
       appConfig.tunnel = null;
     }
 
     final enable = appConfig.enableInDebugMode || kReleaseMode;
-    sentryIsEnabled = enable &&
-        appConfig.sentryDsn != null &&
-        !isFDroidClient &&
-        shouldReportCrashes();
     fileIsEnabled = enable && appConfig.logDirPath != null;
 
     if (fileIsEnabled) {
       await setupLogDir();
     }
-    if (sentryIsEnabled) {
-      setupSentry().ignore();
-    }
 
     Logger.root.level = Level.ALL;
     Logger.root.onRecord.listen(onLogRecord);
 
-    if (isFDroidClient) {
-      assert(
-        sentryIsEnabled == false,
-        "sentry dsn should be disabled for "
-        "f-droid config  ${appConfig.sentryDsn} & ${appConfig.tunnel}",
-      );
-    }
-
-    if (!enable) {
-      $.info("detected debug mode; sentry & file logging disabled.");
-    }
     if (fileIsEnabled) {
       $.info("log file for today: $logFile with prefix ${appConfig.prefix}");
-    }
-    if (sentryIsEnabled) {
-      $.info("sentry uploader started");
     }
 
     unawaited(
@@ -214,63 +158,8 @@ class SuperLogging {
 
     if (appConfig.body == null) return;
 
-    if (enable && sentryIsEnabled) {
-      await SentryFlutter.init(
-        (options) {
-          options.dsn = appConfig!.sentryDsn;
-          options.httpClient = http.Client();
-          if (appConfig.tunnel != null) {
-            options.transport =
-                TunneledTransport(Uri.parse(appConfig.tunnel!), options);
-          }
-        },
-        appRunner: () => appConfig!.body!(),
-      );
-    } else {
+    if (!enable) {
       await appConfig.body!();
-    }
-  }
-
-  static Future<void> setUserID(String userID) async {
-    if (config.sentryDsn != null) {
-      $.finest("setting sentry user ID to: $userID");
-      Sentry.configureScope(
-        (scope) => scope.setUser(SentryUser(id: userID)).onError(
-              (e, s) => $.warning("failed to configure scope user", e, s),
-            ),
-      );
-    }
-  }
-
-  static _shouldSkipSentry(Object error) {
-    if (error is DioException) {
-      return true;
-    }
-    final bool result = error is StorageLimitExceededError ||
-        error is WiFiUnavailableError ||
-        error is InvalidFileError ||
-        error is NoActiveSubscriptionError;
-    if (kDebugMode && result) {
-      $.info('Not sending error to sentry: $error');
-    }
-    return result;
-  }
-
-  static Future<void> _sendErrorToSentry(
-    Object error,
-    StackTrace? stack,
-  ) async {
-    try {
-      if (_shouldSkipSentry(error)) {
-        return;
-      }
-      await Sentry.captureException(
-        error,
-        stackTrace: stack,
-      );
-    } catch (e) {
-      $.info('Sending report to sentry failed: $e');
-      $.info('Original error: $error');
     }
   }
 
@@ -301,11 +190,6 @@ class SuperLogging {
         flushQueue();
       }
     }
-
-    // add error to sentry queue
-    if (sentryIsEnabled && error != null) {
-      _sendErrorToSentry(error, null).ignore();
-    }
   }
 
   static final Queue<String> fileQueueEntries = Queue();
@@ -333,35 +217,6 @@ class SuperLogging {
       // ignore: avoid_print
       text.chunked(logChunkSize).forEach(print);
     }
-  }
-
-  /// A queue to be consumed by [setupSentry].
-  static final sentryQueueControl = StreamController<Error>();
-
-  /// Whether sentry logging is currently enabled or not.
-  static bool sentryIsEnabled = false;
-
-  static Future<void> setupSentry() async {
-    await for (final error in sentryQueueControl.stream.asBroadcastStream()) {
-      try {
-        if (_shouldSkipSentry(error)) {
-          continue;
-        }
-        await Sentry.captureException(
-          error,
-        );
-      } catch (e) {
-        $.fine(
-          "sentry upload failed; will retry after ${config.sentryRetryDelay}",
-        );
-        doSentryRetry(error);
-      }
-    }
-  }
-
-  static void doSentryRetry(Error error) async {
-    await Future.delayed(config.sentryRetryDelay);
-    sentryQueueControl.add(error);
   }
 
   static bool shouldReportCrashes() {
@@ -437,7 +292,6 @@ class SuperLogging {
     return "${pkgInfo.version}+${pkgInfo.buildNumber}";
   }
 
-  // disable sentry on f-droid. We need to make it opt-in preference
   static Future<bool> isFDroidBuild() async {
     if (!Platform.isAndroid) {
       return false;
