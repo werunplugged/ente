@@ -12,10 +12,8 @@ import "package:flutter_displaymode/flutter_displaymode.dart";
 import 'package:logging/logging.dart';
 import "package:media_kit/media_kit.dart";
 import "package:package_info_plus/package_info_plus.dart";
-import 'package:path_provider/path_provider.dart';
 import 'package:photos/app.dart';
 import 'package:photos/core/configuration.dart';
-import 'package:photos/core/error-reporting/super_logging.dart';
 import 'package:photos/core/errors.dart';
 import 'package:photos/core/network/network.dart';
 import "package:photos/db/ml/db.dart";
@@ -352,15 +350,8 @@ Future<void> _sync(String caller) async {
 }
 
 Future _runWithLogs(Function() function, {String prefix = ""}) async {
-  await SuperLogging.main(
-    LogConfig(
-      body: function,
-      logDirPath: (await getApplicationSupportDirectory()).path + "/logs",
-      maxLogFiles: 5,
-      enableInDebugMode: true,
-      prefix: prefix,
-    ),
-  );
+  // Directly execute the function since Sentry logging is removed
+  await function();
 }
 
 Future<void> _scheduleHeartBeat(
