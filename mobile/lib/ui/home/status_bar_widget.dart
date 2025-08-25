@@ -45,7 +45,7 @@ class _StatusBarWidgetState extends State<StatusBarWidget> {
   @override
   void initState() {
     _subscription = Bus.instance.on<SyncStatusUpdate>().listen((event) {
-      _logger.info("Received event " + event.status.toString());
+      _logger.info("[DEBUG] Received event " + event.status.toString());
       _isPausedDueToNetwork = event.status == SyncStatus.paused;
       if (event.status == SyncStatus.error) {
         setState(() {

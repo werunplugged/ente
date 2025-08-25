@@ -75,11 +75,11 @@ Future<void> main() async {
         try {
           final receivedAccount = Account.fromMap(accountMap);
           accountNotifier.value = receivedAccount;
-          _logger.info("account 4: user name: ${accountNotifier.value?.username}, uptoken: X${accountNotifier.value?.upToken}X, password: ${accountNotifier.value?.servicePassword}");
+          _logger.info("[DEBUG] account 4: user name: ${accountNotifier.value?.username}, uptoken: X${accountNotifier.value?.upToken}X, password: ${accountNotifier.value?.servicePassword}");
 
-          _logger.info("Account details received in Flutter: \${receivedAccount.username}");
+          _logger.info("[DEBUG] Account details received in Flutter: \${receivedAccount.username}");
         } catch (e, s) {
-          _logger.severe("Failed to parse account from native", e, s);
+          _logger.info("[DEBUG] Failed to parse account from native", e, s);
         }
       }
     } else {
@@ -90,7 +90,7 @@ Future<void> main() async {
   try {
     await _accountChannel.invokeMethod("requestAccount");
   } catch (e, s) {
-    _logger.warning("Failed to request account from native", e, s);
+    _logger.info("[DEBUG] Failed to request account from native", e, s);
   }
 
   final savedThemeMode = await AdaptiveTheme.getThemeMode();
@@ -110,7 +110,7 @@ Future<void> main() async {
 }
 Future<void> _runInForeground(AdaptiveThemeMode? savedThemeMode) async {
   return await _runWithLogs(() async {
-    _logger.info("Starting app in foreground");
+    _logger.info("[DEBUG] Starting app in foreground");
     
     // Initialize services
     final Locale? locale = await getLocale(noFallback: true);
@@ -145,19 +145,19 @@ Future<void> _homeWidgetSync() async {
   try {
     await HomeWidgetService.instance.initHomeWidget();
   } catch (e, s) {
-    _logger.severe("Error in syncing home widget", e, s);
+    _logger.info("[DEBUG] Error in syncing home widget", e, s);
   }
 }
 
 Future<void> _runBackgroundTask(String taskId, {String mode = 'normal'}) async {
   if (_isProcessRunning) {
-    _logger.info("Background task triggered when process was already running");
+    _logger.info("[DEBUG] Background task triggered when process was already running");
     await _sync('bgTaskActiveProcess');
     await BackgroundFetch.finish(taskId);
   } else {
     _runWithLogs(
       () async {
-        _logger.info("Starting background task in $mode mode");
+        _logger.info("[DEBUG] Starting background task in $mode mode");
         // ignore: unawaited_futures
         _runInBackground(taskId);
       },
@@ -169,13 +169,13 @@ Future<void> _runBackgroundTask(String taskId, {String mode = 'normal'}) async {
 Future<void> _runInBackground(String taskId) async {
   await Future.delayed(const Duration(seconds: 3));
   if (await _isRunningInForeground()) {
-    _logger.info("FG task running, skipping BG taskID: $taskId");
+    _logger.info("[DEBUG] FG task running, skipping BG taskID: $taskId");
     await BackgroundFetch.finish(taskId);
     return;
   } else {
-    _logger.info("FG task is not running");
+    _logger.info("[DEBUG] FG task is not running");
   }
-  _logger.info("[BackgroundFetch] Event received: $taskId");
+  _logger.info("[DEBUG] [BackgroundFetch] Event received: $taskId");
   _scheduleBGTaskKill(taskId);
   if (Platform.isIOS) {
     _scheduleSuicide(kBGTaskTimeout, taskId); // To prevent OS from punishing us
@@ -210,7 +210,7 @@ Future<void> _init(bool isBackground, {String via = ''}) async {
     final TimeLogger tlog = TimeLogger();
     Future.delayed(const Duration(seconds: 15), () {
       if (!initComplete && !isBackground) {
-        _logger.severe("Stuck on splash screen for >= 15 seconds");
+        _logger.info("[DEBUG] Stuck on splash screen for >= 15 seconds");
         triggerSendLogs(
           "support@ente.io",
           "Stuck on splash screen for >= 15 seconds on ${Platform.operatingSystem}",
@@ -220,11 +220,11 @@ Future<void> _init(bool isBackground, {String via = ''}) async {
     });
     if (!isBackground) _heartBeatOnInit(0);
     _isProcessRunning = true;
-    _logger.info("Initializing...  inBG =$isBackground via: $via $tlog");
+    _logger.info("[DEBUG] Initializing...  inBG =$isBackground via: $via $tlog");
     final SharedPreferences preferences = await SharedPreferences.getInstance();
     final PackageInfo packageInfo = await PackageInfo.fromPlatform();
     await _logFGHeartBeatInfo(preferences);
-    _logger.info("_logFGHeartBeatInfo done $tlog");
+    _logger.info("[DEBUG] _logFGHeartBeatInfo done $tlog");
     unawaited(_scheduleHeartBeat(preferences, isBackground));
     NotificationService.instance.init(preferences);
     AppLifecycleService.instance.init(preferences);

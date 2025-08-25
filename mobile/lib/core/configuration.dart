@@ -114,7 +114,7 @@ class Configuration {
         await _migrateSecurityStorageToFirstUnlock();
       }
     } catch (e, s) {
-      _logger.severe("Configuration init failed", e, s);
+      _logger.info("[DEBUG] Configuration init failed", e, s);
       /*
       Check if it's a known is related to reading secret from secure storage
       on android https://github.com/mogol/flutter_secure_storage/issues/541
@@ -152,15 +152,14 @@ class Configuration {
               skippedTempUploadFiles++;
               continue;
             }
-            _logger.info("Deleting file: ${file.path}");
+            _logger.info("[DEBUG] Deleting file: ${file.path}");
             await file.delete();
           } else if (file is Directory) {
             await file.delete(recursive: true);
           }
         }
         await _preferences.setInt(lastTempFolderClearTimeKey, currentTime);
-        _logger.info(
-          "Cleared temp folder except $skippedTempUploadFiles upload files",
+        _logger.info("[DEBUG] Cleared temp folder except $skippedTempUploadFiles upload files",
         );
       } else {
         _logger.info("Skipping temp folder clear");
@@ -340,8 +339,8 @@ class Configuration {
         CryptoUtil.base642bin(attributes.keyDecryptionNonce),
       );
     } catch (e) {
-      _logger.severe('master-key decryption failed', e);
-      throw Exception("Incorrect password");
+      _logger.info('[DEBUG] master-key decryption failed', e);
+      throw Exception("[DEBUG] Incorrect password");
     }
     await setKey(CryptoUtil.bin2base64(key));
     final secretKey = CryptoUtil.decryptSync(
@@ -408,7 +407,7 @@ class Configuration {
         CryptoUtil.base642bin(attributes.masterKeyDecryptionNonce!),
       );
     } catch (e) {
-      _logger.severe(e);
+      _logger.info(e);
       rethrow;
     }
     await setKey(CryptoUtil.bin2base64(masterKey));
@@ -686,9 +685,9 @@ class Configuration {
   Future<void> triggerLogoutToNative() async {
     try {
       await _loginChannel.invokeMethod('logout');
-      _logger.info('Logout request sent to native code');
+      _logger.info('[DEBUG] Logout request sent to native code');
     } catch (e) {
-      _logger.warning('Failed to send logout request to native code', e);
+      _logger.info('[DEBUG]Failed to send logout request to native code', e);
     }
   }
 }

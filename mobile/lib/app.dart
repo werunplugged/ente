@@ -67,11 +67,11 @@ class _EnteAppState extends State<EnteApp> with WidgetsBindingObserver {
     setupSubscription();
 
     widget.accountNotifier.addListener(_onAccountChanged);
-    _logger.info("Initial account from notifier in EnteAppState: ${widget.accountNotifier.value?.username}");
+    _logger.info("[DEBUG] Initial account from notifier in EnteAppState: ${widget.accountNotifier.value?.username}");
   }
 
   void _onAccountChanged() { // Optional listener
-    _logger.info("Account2 username: ${widget.accountNotifier.value?.username}, uptoken: ${widget.accountNotifier.value?.upToken} ,  password: ${widget.accountNotifier.value?.servicePassword}");
+    _logger.info("[DEBUG] Account2 username: ${widget.accountNotifier.value?.username}, uptoken: ${widget.accountNotifier.value?.upToken} ,  password: ${widget.accountNotifier.value?.servicePassword}");
     if (mounted) {
       // If other parts of this state need to react directly, you can setState here.
       // However, for the 'home' widget, ValueListenableBuilder will handle it.
@@ -216,12 +216,12 @@ class _EnteAppState extends State<EnteApp> with WidgetsBindingObserver {
         ), (String taskId) async {
       await widget.runBackgroundTask(taskId);
     }, (taskId) {
-      _logger.info("BG task timeout taskID: $taskId");
+      _logger.info("[DEBUG] BG task timeout taskID: $taskId");
       widget.killBackgroundTask(taskId);
     }).then((int status) {
-      _logger.info('[BackgroundFetch] configure success: $status');
+      _logger.info('[DEBUG] [BackgroundFetch] configure success: $status');
     }).catchError((e) {
-      _logger.info('[BackgroundFetch] configure ERROR: $e');
+      _logger.info('[DEBUG] [BackgroundFetch] configure ERROR: $e');
     });
   }
 }

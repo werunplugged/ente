@@ -122,7 +122,7 @@ class _HomeWidgetState extends State<HomeWidget> with WidgetsBindingObserver {
   @override
   void initState() {
     WidgetsBinding.instance.addObserver(this);
-    _logger.info("Building initstate");
+    _logger.info("[DEBUG] Building initstate");
     super.initState();
 
     if (LocalSyncService.instance.hasCompletedFirstImport()) {
@@ -163,7 +163,7 @@ class _HomeWidgetState extends State<HomeWidget> with WidgetsBindingObserver {
       await _autoLogoutAlert();
     });
     _loggedOutEvent = Bus.instance.on<UserLoggedOutEvent>().listen((event) async {
-      _logger.info('logged out, selectTab index to 0');
+      _logger.info('[DEBUG] logged out, selectTab index to 0');
       _selectedTabIndex = 0;
       
       // Clear login flow state on logout
@@ -258,7 +258,7 @@ class _HomeWidgetState extends State<HomeWidget> with WidgetsBindingObserver {
         _logger.info('[DEBUG] Received logout request from native');
         await Configuration.instance.logout(autoLogout: true);
         // Notify native that logout is complete
-        const MethodChannel('ente_logout_complete_channel').invokeMethod('logoutComplete');
+        await const MethodChannel('ente_logout_complete_channel').invokeMethod('logoutComplete');
       }
     });
 
@@ -369,7 +369,7 @@ class _HomeWidgetState extends State<HomeWidget> with WidgetsBindingObserver {
                 }),
               );
             } catch (e, s) {
-              _logger.severe("Failed to decrypt password for album", e, s);
+              _logger.info("[DEBUG] Failed to decrypt password for album", e, s);
               await showGenericErrorDialog(context: context, error: e);
               return;
             }
@@ -397,7 +397,7 @@ class _HomeWidgetState extends State<HomeWidget> with WidgetsBindingObserver {
         );
       }
     } catch (e, s) {
-      _logger.severe("Failed to handle public album link", e, s);
+      _logger.info("[DEBUG] Failed to handle public album link", e, s);
       return;
     }
   }
@@ -524,7 +524,7 @@ class _HomeWidgetState extends State<HomeWidget> with WidgetsBindingObserver {
         }
       },
       onError: (err) {
-        _logger.severe("getIntentDataStream error: $err");
+        _logger.info("[DEBUG] getIntentDataStream error: $err");
       },
     );
     // For sharing images/public links coming from outside the app while the app is closed
@@ -579,7 +579,7 @@ class _HomeWidgetState extends State<HomeWidget> with WidgetsBindingObserver {
         );
       }
     } catch (e) {
-      _logger.severe("Error while getting initial public album deep link: $e");
+      _logger.info("[DEBUG] Error while getting initial public album deep link: $e");
     }
 
     _publicAlbumLinkSubscription = appLinks.uriLinkStream.listen(

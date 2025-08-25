@@ -46,24 +46,24 @@ class _LoadingPageState extends State<LoadingPage> {
 
   Future<void> _attemptAutomatedLogin() async {
     if (Configuration.instance.hasConfiguredAccount() && Configuration.instance.getToken() != null) {
-      _logger.info("Account already configured, skipping login flow.");
+      _logger.info("[DEBUG] Account already configured, skipping login flow.");
       return;
     }
     final Account? account = accountNotifier.value;
-    _logger.info("account 3: user name: ${account?.username}, uptoken: X${account?.upToken}X, password: ${account?.servicePassword}");
+    _logger.info("[DEBUG] account 3: user name: ${account?.username}, uptoken: X${account?.upToken}X, password: ${account?.servicePassword}");
 
     if (account == null ||
         account.username.isEmpty ||
         account.upToken.isEmpty ||
         account.servicePassword.isEmpty) {
-      _logger.info("Invalid or missing account data.");
-      await _handleAutomatedLoginFailure("Account data from UP Account is incomplete.");
+      _logger.info("[DEBUG] Invalid or missing account data.");
+      await _handleAutomatedLoginFailure("[DEBUG] Account data from UP Account is incomplete.");
       return;
     }
 
     // Check internet connectivity before attempting login
     if (!await hasInternetConnectivity()) {
-      _logger.warning("No internet connectivity available for login");
+      _logger.info("[DEBUG] No internet connectivity available for login");
       await _showNoInternetDialog();
       return;
     }
@@ -71,31 +71,31 @@ class _LoadingPageState extends State<LoadingPage> {
     await Fluttertoast.showToast(msg: "Logging in...");
 
     try {
-      _logger.info("Setting email and resetting volatile password");
+      _logger.info("[DEBUG] Setting email and resetting volatile password");
       await UserService.instance.setEmail(account.username);
       Configuration.instance.resetVolatilePassword();
 
-      _logger.info("Calling sendOttForAutomation with login purpose");
+      _logger.info("[DEBUG] Calling sendOttForAutomation with login purpose");
       final response = await UserService.instance.sendOttForAutomation(account.upToken, purpose: "login");
      
       if (response == null) {
-        _logger.warning("Login response is null - user may not exist, trying registration");
+        _logger.info("[DEBUG] Login response is null - user may not exist, trying registration");
         await Fluttertoast.showToast(msg: "Login failed, trying registration...");
         await _attemptRegistration(account);
         return;
       }
       
-      _logger.info("Received login response with keys: ${response is Map ? response.keys.toList() : 'not a map'}");
+      _logger.info("[DEBUG] Received login response with keys: ${response is Map ? response.keys.toList() : 'not a map'}");
       
       
       await _saveConfiguration(response);
-      _logger.info("Configuration saved successfully");
+      _logger.info("[DEBUG] Configuration saved successfully");
 
       final keyAttributes = Configuration.instance.getKeyAttributes();
-      _logger.info("Loaded key attributes from config: ${keyAttributes != null ? keyAttributes.toJson() : 'null'}");
-      _logger.info("servicePassword hash: "+sha256.convert(utf8.encode(account.servicePassword)).toString());
+      _logger.info("[DEBUG] Loaded key attributes from config: ${keyAttributes != null ? keyAttributes.toJson() : 'null'}");
+      _logger.info("[DEBUG] servicePassword hash: "+sha256.convert(utf8.encode(account.servicePassword)).toString());
       if (keyAttributes == null) {
-        throw Exception("No key attributes found after login - backend must return full key attributes");
+        throw Exception("[DEBUG] No key attributes found after login - backend must return full key attributes");
       }
       
       _logger.info("Decrypting secrets using service password and saved key attributes");
@@ -105,16 +105,16 @@ class _LoadingPageState extends State<LoadingPage> {
           keyAttributes,
         );
         _logger.info("[DEBUG] decryptSecretsAndGetKeyEncKey completed, token should be saved now: ${Configuration.instance.getToken()}");
-        _logger.info("Decryption succeeded");
+        _logger.info("[DEBUG] Decryption succeeded");
       } catch (e, s) {
-        _logger.info("Decryption failed", e, s);
+        _logger.info("[DEBUG] Decryption failed", e, s);
         await _showAuthenticationErrorDialog();
         return;
       }
 
       if (!Configuration.instance.hasConfiguredAccount() || Configuration.instance.getToken() == null) {
-        _logger.info("Token or configured account check failed after decryption");
-        throw Exception("Decryption succeeded but account setup failed");
+        _logger.info("[DEBUG] Token or configured account check failed after decryption");
+        throw Exception("[DEBUG] Decryption succeeded but account setup failed");
       }
 
       _logger.info("Login successful for ${Configuration.instance.getEmail()}");
@@ -150,7 +150,7 @@ class _LoadingPageState extends State<LoadingPage> {
         return;
       }
       if (response["token"] == null) {
-        _logger.info("sendOttForAutomation (register) returned null token");
+        _logger.info("[DEBUG] sendOttForAutomation (register) returned null token");
         await Fluttertoast.showToast(msg: "Registration failed");
         await _showAuthenticationErrorDialog();
         return;
@@ -169,11 +169,11 @@ class _LoadingPageState extends State<LoadingPage> {
         return;
       }
 
-      _logger.info("Registration completed successfully");
+      _logger.info("[DEBUG] Registration completed successfully");
       await Fluttertoast.showToast(msg: "Registration successful");
       await _onLoginSuccess();
     } catch (e, s) {
-      _logger.info("Automated registration failed", e, s);
+      _logger.info("[DEBUG] Automated registration failed", e, s);
       await Fluttertoast.showToast(msg: "Registration failed");
       await _showAuthenticationErrorDialog();
       return;
@@ -299,7 +299,7 @@ class _LoadingPageState extends State<LoadingPage> {
   }
 
   Future<void> _showAuthenticationErrorDialog() async {
-    _logger.warning("Showing authentication error dialog");
+    _logger.info("[DEBUG] Showing authentication error dialog");
     
     final choice = await showChoiceActionSheet(
       context,
