@@ -5,9 +5,6 @@ import (
 	"database/sql"
 	b64 "encoding/base64"
 	"fmt"
-	"github.com/ente-io/museum/pkg/controller/collections"
-	"github.com/ente-io/museum/pkg/utils/auth"
-	"gopkg.in/natefinch/lumberjack.v2"
 	"net/http"
 	"os"
 	"os/signal"
@@ -16,6 +13,10 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/ente-io/museum/pkg/controller/collections"
+	"github.com/ente-io/museum/pkg/utils/auth"
+	"gopkg.in/natefinch/lumberjack.v2"
 
 	"github.com/ente-io/museum/ente/base"
 	"github.com/ente-io/museum/pkg/controller/emergency"
@@ -685,18 +686,9 @@ func main() {
 		StripeController:    stripeController,
 	}
 
-	upBillingHandler := &api.UPBillingHandler{
-		Controller: upBillingController,
-	}
-	// Unplugged billing endpoints
-	publicAPI.GET("/billing/up/plans/v2", upBillingHandler.GetPlansV2)
-	privateAPI.GET("/billing/up/user-plans", upBillingHandler.GetUserPlans)
-	privateAPI.GET("/billing/up/subscription", upBillingHandler.GetSubscription)
-	privateAPI.POST("/billing/up/verify-subscription", upBillingHandler.VerifySubscription)
-
 	// Unplugged webhook endpoints
 	upWebhookHandler := &api.UPWebhookHandler{
-		Controller: upBillingController,
+		UpBillingController: upBillingController,
 	}
 
 	// Create webhook signature verification middleware

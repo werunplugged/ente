@@ -11,7 +11,6 @@ import "package:flutter_animate/flutter_animate.dart";
 import "package:flutter_local_notifications/flutter_local_notifications.dart";
 import 'package:logging/logging.dart';
 import "package:media_extension/media_extension_action_types.dart";
-import 'package:modal_bottom_sheet/modal_bottom_sheet.dart';
 import "package:move_to_background/move_to_background.dart";
 import "package:package_info_plus/package_info_plus.dart";
 import 'package:photos/core/configuration.dart';
@@ -44,9 +43,9 @@ import "package:photos/services/sync/diff_fetcher.dart";
 import 'package:photos/services/sync/local_sync_service.dart';
 import "package:photos/services/sync/remote_sync_service.dart";
 import 'package:photos/states/user_details_state.dart';
-import 'package:photos/theme/colors.dart';
 import "package:photos/theme/effects.dart";
 import 'package:photos/theme/ente_theme.dart';
+import 'package:photos/ui/account/up_login_page.dart';
 import 'package:photos/ui/collections/collection_action_sheet.dart';
 import "package:photos/ui/components/buttons/button_widget.dart";
 import "package:photos/ui/components/models/button_type.dart";
@@ -55,13 +54,10 @@ import 'package:photos/ui/home/grant_permissions_widget.dart';
 import 'package:photos/ui/home/header_widget.dart';
 import 'package:photos/ui/home/home_bottom_nav_bar.dart';
 import 'package:photos/ui/home/home_gallery_widget.dart';
-import 'package:photos/ui/home/landing_page_widget.dart';
 import "package:photos/ui/home/loading_photos_widget.dart";
 import 'package:photos/ui/home/start_backup_hook_widget.dart';
-import 'package:photos/ui/notification/update/change_log_page.dart';
 import "package:photos/ui/settings/app_update_dialog.dart";
 import "package:photos/ui/settings_page.dart";
-import "package:photos/ui/tabs/shared_collections_tab.dart";
 import "package:photos/ui/tabs/user_collections_tab.dart";
 import "package:photos/ui/viewer/actions/file_viewer.dart";
 import "package:photos/ui/viewer/gallery/collection_page.dart";
@@ -72,6 +68,7 @@ import "package:photos/utils/collection_util.dart";
 import 'package:photos/utils/dialog_util.dart';
 import "package:photos/utils/navigation_util.dart";
 import 'package:receive_sharing_intent/receive_sharing_intent.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class HomeWidget extends StatefulWidget {
   const HomeWidget({
@@ -82,13 +79,15 @@ class HomeWidget extends StatefulWidget {
   State<StatefulWidget> createState() => _HomeWidgetState();
 }
 
-class _HomeWidgetState extends State<HomeWidget> {
+class _HomeWidgetState extends State<HomeWidget> with WidgetsBindingObserver {
   static const _userCollectionsTab = UserCollectionsTab();
-  static const _sharedCollectionTab = SharedCollectionsTab();
   static const _searchTab = SearchTab();
   static final _settingsPage = SettingsPage(
     emailNotifier: UserService.instance.emailValueNotifier,
   );
+
+  static const String _loginFlowActiveKey = "login_flow_active";
+  static const MethodChannel _logoutChannel = MethodChannel('ente_logout_channel');
 
   final _logger = Logger("HomeWidgetState");
   final _selectedFiles = SelectedFiles();
@@ -103,6 +102,8 @@ class _HomeWidgetState extends State<HomeWidget> {
   bool _shouldRenderCreateCollectionSheet = false;
   bool _showShowBackupHook = false;
   final isOnSearchTabNotifier = ValueNotifier<bool>(false);
+  bool _isLoadingPageActive = false;
+  bool _shouldShowLoadingPage = false;
 
   late StreamSubscription<TabChangedEvent> _tabChangedEventSubscription;
   late StreamSubscription<SubscriptionPurchasedEvent>
@@ -120,7 +121,8 @@ class _HomeWidgetState extends State<HomeWidget> {
 
   @override
   void initState() {
-    _logger.info("Building initstate");
+    WidgetsBinding.instance.addObserver(this);
+    _logger.info("[DEBUG] Building initstate");
     super.initState();
 
     if (LocalSyncService.instance.hasCompletedFirstImport()) {
@@ -160,9 +162,16 @@ class _HomeWidgetState extends State<HomeWidget> {
         Bus.instance.on<TriggerLogoutEvent>().listen((event) async {
       await _autoLogoutAlert();
     });
-    _loggedOutEvent = Bus.instance.on<UserLoggedOutEvent>().listen((event) {
-      _logger.info('logged out, selectTab index to 0');
+    _loggedOutEvent = Bus.instance.on<UserLoggedOutEvent>().listen((event) async {
+      _logger.info('[DEBUG] logged out, selectTab index to 0');
       _selectedTabIndex = 0;
+      
+      // Clear login flow state on logout
+      _isLoadingPageActive = false;
+      _shouldShowLoadingPage = false;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_loginFlowActiveKey, false);
+      
       if (mounted) {
         setState(() {});
       }
@@ -238,18 +247,20 @@ class _HomeWidgetState extends State<HomeWidget> {
 
     // For sharing images coming from outside the app
     _initMediaShareSubscription();
-    WidgetsBinding.instance.addPostFrameCallback(
-      (_) => Future.delayed(
-        const Duration(seconds: 1),
-        () => {
-          if (mounted) {showChangeLog(context)},
-        },
-      ),
-    );
 
     NotificationService.instance
         .initialize(_onDidReceiveNotificationResponse)
         .ignore();
+
+    // Add MethodChannel handler for native-triggered logout
+    _logoutChannel.setMethodCallHandler((call) async {
+      if (call.method == 'onLogoutRequested') {
+        _logger.info('[DEBUG] Received logout request from native');
+        await Configuration.instance.logout(autoLogout: true);
+        // Notify native that logout is complete
+        await const MethodChannel('ente_logout_complete_channel').invokeMethod('logoutComplete');
+      }
+    });
 
     if (Platform.isAndroid &&
         !localSettings.hasConfiguredInAppLinkPermissions() &&
@@ -266,6 +277,15 @@ class _HomeWidgetState extends State<HomeWidget> {
           });
         }
       });
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) async {
+    if (state == AppLifecycleState.detached || state == AppLifecycleState.inactive) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_loginFlowActiveKey, false);
+      _logger.info('Cleared _loginFlowActiveKey due to app lifecycle state: $state');
     }
   }
 
@@ -349,7 +369,7 @@ class _HomeWidgetState extends State<HomeWidget> {
                 }),
               );
             } catch (e, s) {
-              _logger.severe("Failed to decrypt password for album", e, s);
+              _logger.info("[DEBUG] Failed to decrypt password for album", e, s);
               await showGenericErrorDialog(context: context, error: e);
               return;
             }
@@ -377,7 +397,7 @@ class _HomeWidgetState extends State<HomeWidget> {
         );
       }
     } catch (e, s) {
-      _logger.severe("Failed to handle public album link", e, s);
+      _logger.info("[DEBUG] Failed to handle public album link", e, s);
       return;
     }
   }
@@ -418,6 +438,7 @@ class _HomeWidgetState extends State<HomeWidget> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _tabChangedEventSubscription.cancel();
     _subscriptionPurchaseEvent.cancel();
     _triggerLogoutEvent.cancel();
@@ -503,7 +524,7 @@ class _HomeWidgetState extends State<HomeWidget> {
         }
       },
       onError: (err) {
-        _logger.severe("getIntentDataStream error: $err");
+        _logger.info("[DEBUG] getIntentDataStream error: $err");
       },
     );
     // For sharing images/public links coming from outside the app while the app is closed
@@ -558,7 +579,7 @@ class _HomeWidgetState extends State<HomeWidget> {
         );
       }
     } catch (e) {
-      _logger.severe("Error while getting initial public album deep link: $e");
+      _logger.info("[DEBUG] Error while getting initial public album deep link: $e");
     }
 
     _publicAlbumLinkSubscription = appLinks.uriLinkStream.listen(
@@ -649,8 +670,31 @@ class _HomeWidgetState extends State<HomeWidget> {
 
   Widget _getBody(BuildContext context) {
     if (!Configuration.instance.hasConfiguredAccount()) {
-      _closeDrawerIfOpen(context);
-      return const LandingPageWidget();
+      // Check if login flow is already active using persistent state
+      if (!_isLoadingPageActive) {
+        _checkAndStartLoginFlow();
+        return const Center(child: CircularProgressIndicator());
+      } else if (_shouldShowLoadingPage) {
+        return LoadingPage(
+          onLoginComplete: () async {
+            _logger.info("[DEBUG] onLoginComplete fired");
+            final username = Configuration.instance.getUsername();
+            _logger.info("[DEBUG] Username in onLoginComplete: $username");
+            _logger.info("[DEBUG] hasConfiguredAccount: "+Configuration.instance.hasConfiguredAccount().toString());
+            // Username-to-native logic removed; now handled in LoadingPage
+            _isLoadingPageActive = false;
+            _shouldShowLoadingPage = false;
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setBool(_loginFlowActiveKey, false);
+            if (mounted) {
+              setState(() {});
+            }
+          },
+        );
+      } else {
+        // Show a spinner while login is in progress
+        return const Center(child: CircularProgressIndicator());
+      }
     }
     if (!permissionService.hasGrantedPermissions()) {
       entityService.syncEntities().then((_) {
@@ -659,6 +703,7 @@ class _HomeWidgetState extends State<HomeWidget> {
       return const GrantPermissionsWidget();
     }
     if (!LocalSyncService.instance.hasCompletedFirstImport()) {
+      _logger.info('hasCompletedFirstImport');
       return const LoadingPhotosWidget();
     }
     if (_sharedFiles != null &&
@@ -710,7 +755,6 @@ class _HomeWidgetState extends State<HomeWidget> {
                         selectedFiles: _selectedFiles,
                       ),
                 _userCollectionsTab,
-                _sharedCollectionTab,
                 _searchTab,
               ],
             );
@@ -768,6 +812,34 @@ class _HomeWidgetState extends State<HomeWidget> {
     );
   }
 
+  Future<void> _checkAndStartLoginFlow() async {
+    if (_isLoadingPageActive) return; // Already checking/starting
+    
+    final prefs = await SharedPreferences.getInstance();
+    final isLoginFlowActive = prefs.getBool(_loginFlowActiveKey) ?? false;
+    
+    if (isLoginFlowActive) {
+      _logger.info('Login flow already active, showing spinner');
+      _isLoadingPageActive = true;
+      if (mounted) {
+        setState(() {});
+      }
+      return;
+    }
+    
+    // Start login flow
+    _logger.info('Starting login flow');
+    _isLoadingPageActive = true;
+    _shouldShowLoadingPage = true;
+    await prefs.setBool(_loginFlowActiveKey, true);
+    
+    if (mounted) {
+      setState(() {
+        // This will trigger a rebuild and show the LoadingPage
+      });
+    }
+  }
+
   void _closeDrawerIfOpen(BuildContext context) {
     Scaffold.of(context).isDrawerOpen
         ? SchedulerBinding.instance.addPostFrameCallback((timeStamp) {
@@ -815,36 +887,6 @@ class _HomeWidgetState extends State<HomeWidget> {
     }
     final ott = link!.queryParameters["ott"]!;
     UserService.instance.verifyEmail(context, ott);
-  }
-
-  showChangeLog(BuildContext context) async {
-    final bool show = await updateService.showChangeLog();
-    if (!show || !Configuration.instance.isLoggedIn()) {
-      return;
-    }
-    final colorScheme = getEnteColorScheme(context);
-    await showBarModalBottomSheet(
-      topControl: const SizedBox.shrink(),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(5),
-          topRight: Radius.circular(5),
-        ),
-      ),
-      backgroundColor: colorScheme.backgroundElevated,
-      enableDrag: false,
-      barrierColor: backdropFaintDark,
-      context: context,
-      builder: (BuildContext context) {
-        return Padding(
-          padding:
-              EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-          child: const ChangeLogPage(),
-        );
-      },
-    );
-    // Do not show change dialog again
-    updateService.hideChangeLog().ignore();
   }
 
   void _onDidReceiveNotificationResponse(

@@ -9,7 +9,6 @@ import 'package:photos/states/user_details_state.dart';
 import 'package:photos/theme/colors.dart';
 import 'package:photos/theme/ente_theme.dart';
 import "package:photos/ui/common/loading_widget.dart";
-import 'package:photos/ui/payment/subscription.dart';
 import 'package:photos/ui/settings/storage_progress_widget.dart';
 import 'package:photos/utils/standalone/data.dart';
 
@@ -21,34 +20,11 @@ class StorageCardWidget extends StatefulWidget {
 }
 
 class _StorageCardWidgetState extends State<StorageCardWidget> {
-  late Image _background;
   final _logger = Logger((_StorageCardWidgetState).toString());
-  final ValueNotifier<bool> _isStorageCardPressed = ValueNotifier(false);
   int? familyMemberStorageLimit;
   bool showFamilyBreakup = false;
 
-  @override
-  void initState() {
-    super.initState();
-    _background = const Image(
-      image: AssetImage("assets/storage_card_background.png"),
-      fit: BoxFit.fill,
-    );
-  }
 
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    // precache background image to avoid flicker
-    // https://stackoverflow.com/questions/51343735/flutter-image-preload
-    precacheImage(_background.image, context);
-  }
-
-  @override
-  void dispose() {
-    _isStorageCardPressed.dispose();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -61,23 +37,7 @@ class _StorageCardWidgetState extends State<StorageCardWidget> {
       );
       throw Error();
     } else {
-      return GestureDetector(
-        behavior: HitTestBehavior.translucent,
-        onTap: () async {
-          // ignore: unawaited_futures
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (BuildContext context) {
-                return getSubscriptionPage();
-              },
-            ),
-          );
-        },
-        onTapDown: (details) => _isStorageCardPressed.value = true,
-        onTapCancel: () => _isStorageCardPressed.value = false,
-        onTapUp: (details) => _isStorageCardPressed.value = false,
-        child: containerForUserDetails(userDetails),
-      );
+      return containerForUserDetails(userDetails);
     }
   }
 
@@ -86,9 +46,13 @@ class _StorageCardWidgetState extends State<StorageCardWidget> {
   ) {
     return Stack(
       children: [
-        SizedBox(
+        Container(
           width: double.infinity,
-          child: _background,
+          height: 120, // Added height since we removed the image
+          decoration: BoxDecoration(
+            color: const Color(0xFF475CC7),
+            borderRadius: BorderRadius.circular(8),
+          ),
         ),
         Positioned.fill(
           child: userDetails is UserDetails
@@ -97,23 +61,7 @@ class _StorageCardWidgetState extends State<StorageCardWidget> {
                   color: strokeBaseDark,
                 ),
         ),
-        Positioned.fill(
-          child: Align(
-            alignment: Alignment.centerRight,
-            child: Padding(
-              padding: const EdgeInsets.only(right: 4),
-              child: ValueListenableBuilder<bool>(
-                builder: (BuildContext context, bool value, Widget? child) {
-                  return Icon(
-                    Icons.chevron_right_outlined,
-                    color: value ? strokeMutedDark : strokeBaseDark,
-                  );
-                },
-                valueListenable: _isStorageCardPressed,
-              ),
-            ),
-          ),
-        ),
+
       ],
     );
   }

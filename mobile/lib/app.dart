@@ -15,6 +15,7 @@ import 'package:photos/ente_theme_data.dart';
 import "package:photos/events/memories_changed_event.dart";
 import "package:photos/generated/l10n.dart";
 import "package:photos/l10n/l10n.dart";
+import 'package:photos/models/account/Account.dart';
 import "package:photos/service_locator.dart";
 import 'package:photos/services/app_lifecycle_service.dart';
 import "package:photos/services/home_widget_service.dart";
@@ -24,17 +25,20 @@ import 'package:photos/ui/tabs/home_widget.dart';
 import "package:photos/ui/viewer/actions/file_viewer.dart";
 import "package:photos/utils/intent_util.dart";
 
+
 class EnteApp extends StatefulWidget {
   final Future<void> Function(String) runBackgroundTask;
   final Future<void> Function(String) killBackgroundTask;
   final AdaptiveThemeMode? savedThemeMode;
   final Locale? locale;
+  final ValueNotifier<Account?> accountNotifier;
 
   const EnteApp(
     this.runBackgroundTask,
     this.killBackgroundTask,
     this.locale,
     this.savedThemeMode, {
+    required this.accountNotifier,
     super.key,
   });
 
@@ -57,9 +61,21 @@ class _EnteAppState extends State<EnteApp> with WidgetsBindingObserver {
     _logger.info('init App');
     super.initState();
     locale = widget.locale;
+
     setupIntentAction();
     WidgetsBinding.instance.addObserver(this);
     setupSubscription();
+
+    widget.accountNotifier.addListener(_onAccountChanged);
+    _logger.info("[DEBUG] Initial account from notifier in EnteAppState: ${widget.accountNotifier.value?.username}");
+  }
+
+  void _onAccountChanged() { // Optional listener
+    _logger.info("[DEBUG] Account2 username: ${widget.accountNotifier.value?.username}, uptoken: ${widget.accountNotifier.value?.upToken} ,  password: ${widget.accountNotifier.value?.servicePassword}");
+    if (mounted) {
+      // If other parts of this state need to react directly, you can setState here.
+      // However, for the 'home' widget, ValueListenableBuilder will handle it.
+    }
   }
 
   void setupSubscription() {
@@ -114,7 +130,7 @@ class _EnteAppState extends State<EnteApp> with WidgetsBindingObserver {
           dark: darkThemeData,
           initial: widget.savedThemeMode ?? AdaptiveThemeMode.system,
           builder: (lightTheme, dartTheme) => MaterialApp(
-            title: "ente",
+            title: "UP Photos",
             themeMode: ThemeMode.system,
             theme: lightTheme,
             darkTheme: dartTheme,
@@ -145,7 +161,7 @@ class _EnteAppState extends State<EnteApp> with WidgetsBindingObserver {
           machineLearningController.onUserInteraction();
         },
         child: MaterialApp(
-          title: "ente",
+          title: "UP Photos",
           themeMode: ThemeMode.system,
           theme: lightThemeData,
           darkTheme: darkThemeData,
@@ -168,6 +184,7 @@ class _EnteAppState extends State<EnteApp> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _memoriesChangedSubscription.cancel();
+    widget.accountNotifier.removeListener(_onAccountChanged);
     super.dispose();
   }
 
@@ -199,12 +216,12 @@ class _EnteAppState extends State<EnteApp> with WidgetsBindingObserver {
         ), (String taskId) async {
       await widget.runBackgroundTask(taskId);
     }, (taskId) {
-      _logger.info("BG task timeout taskID: $taskId");
+      _logger.info("[DEBUG] BG task timeout taskID: $taskId");
       widget.killBackgroundTask(taskId);
     }).then((int status) {
-      _logger.info('[BackgroundFetch] configure success: $status');
+      _logger.info('[DEBUG] [BackgroundFetch] configure success: $status');
     }).catchError((e) {
-      _logger.info('[BackgroundFetch] configure ERROR: $e');
+      _logger.info('[DEBUG] [BackgroundFetch] configure ERROR: $e');
     });
   }
 }

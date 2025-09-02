@@ -6,19 +6,14 @@ import 'package:background_fetch/background_fetch.dart';
 import "package:computer/computer.dart";
 import 'package:ente_crypto/ente_crypto.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import "package:flutter/rendering.dart";
 import "package:flutter/services.dart";
 import "package:flutter_displaymode/flutter_displaymode.dart";
 import 'package:logging/logging.dart';
 import "package:media_kit/media_kit.dart";
 import "package:package_info_plus/package_info_plus.dart";
-import 'package:path_provider/path_provider.dart';
 import 'package:photos/app.dart';
 import 'package:photos/core/configuration.dart';
-import 'package:photos/core/constants.dart';
-import 'package:photos/core/error-reporting/super_logging.dart';
 import 'package:photos/core/errors.dart';
 import 'package:photos/core/network/network.dart';
 import "package:photos/db/ml/db.dart";
@@ -26,6 +21,7 @@ import 'package:photos/db/upload_locks_db.dart';
 import 'package:photos/ente_theme_data.dart';
 import "package:photos/extensions/stop_watch.dart";
 import "package:photos/l10n/l10n.dart";
+import 'package:photos/models/account/Account.dart';
 import "package:photos/service_locator.dart";
 import "package:photos/services/account/user_service.dart";
 import 'package:photos/services/app_lifecycle_service.dart';
@@ -52,7 +48,10 @@ import 'package:photos/utils/file_uploader.dart';
 import "package:photos/utils/lock_screen_settings.dart";
 import 'package:shared_preferences/shared_preferences.dart';
 
+
 final _logger = Logger("main");
+final ValueNotifier<Account?> accountNotifier = ValueNotifier<Account?>(null);
+
 
 bool _isProcessRunning = false;
 const kLastBGTaskHeartBeatTime = "bg_task_hb_time";
@@ -64,10 +63,35 @@ const kBGTaskTimeout = Duration(seconds: 25);
 const kBGPushTimeout = Duration(seconds: 28);
 const kFGTaskDeathTimeoutInMicroseconds = 5000000;
 
-void main() async {
-  debugRepaintRainbowEnabled = false;
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   MediaKit.ensureInitialized();
+
+  const MethodChannel _accountChannel = MethodChannel('com.unplugged.photos/account');
+  _accountChannel.setMethodCallHandler((MethodCall call) async {
+    if (call.method == "onAccountReceived") {
+      final Map<dynamic, dynamic>? accountMap = call.arguments as Map<dynamic, dynamic>?;
+      if (accountMap != null) {
+        try {
+          final receivedAccount = Account.fromMap(accountMap);
+          accountNotifier.value = receivedAccount;
+          _logger.info("[DEBUG] account 4: user name: ${accountNotifier.value?.username}, uptoken: X${accountNotifier.value?.upToken}X, password: ${accountNotifier.value?.servicePassword}");
+
+          _logger.info("[DEBUG] Account details received in Flutter: \${receivedAccount.username}");
+        } catch (e, s) {
+          _logger.info("[DEBUG] Failed to parse account from native", e, s);
+        }
+      }
+    } else {
+      throw MissingPluginException('No such method \${call.method}');
+    }
+  });
+
+  try {
+    await _accountChannel.invokeMethod("requestAccount");
+  } catch (e, s) {
+    _logger.info("[DEBUG] Failed to request account from native", e, s);
+  }
 
   final savedThemeMode = await AdaptiveTheme.getThemeMode();
   await _runInForeground(savedThemeMode);
@@ -81,21 +105,22 @@ void main() async {
   );
 
   unawaited(
-    SystemChrome.setEnabledSystemUIMode(
-      SystemUiMode.edgeToEdge,
-    ),
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge),
   );
 }
-
 Future<void> _runInForeground(AdaptiveThemeMode? savedThemeMode) async {
   return await _runWithLogs(() async {
-    _logger.info("Starting app in foreground");
-    await _init(false, via: 'mainMethod');
+    _logger.info("[DEBUG] Starting app in foreground");
+    
+    // Initialize services
     final Locale? locale = await getLocale(noFallback: true);
+    await _init(false, via: 'mainMethod');
+    
+    // Start main app after initialization
     runApp(
       AppLock(
         builder: (args) =>
-            EnteApp(_runBackgroundTask, _killBGTask, locale, savedThemeMode),
+            EnteApp(_runBackgroundTask, _killBGTask, locale, savedThemeMode,  accountNotifier: accountNotifier,),
         lockScreen: const LockScreen(),
         enabled: await Configuration.instance.shouldShowLockScreen() ||
             localSettings.isOnGuestView(),
@@ -120,19 +145,19 @@ Future<void> _homeWidgetSync() async {
   try {
     await HomeWidgetService.instance.initHomeWidget();
   } catch (e, s) {
-    _logger.severe("Error in syncing home widget", e, s);
+    _logger.info("[DEBUG] Error in syncing home widget", e, s);
   }
 }
 
 Future<void> _runBackgroundTask(String taskId, {String mode = 'normal'}) async {
   if (_isProcessRunning) {
-    _logger.info("Background task triggered when process was already running");
+    _logger.info("[DEBUG] Background task triggered when process was already running");
     await _sync('bgTaskActiveProcess');
     await BackgroundFetch.finish(taskId);
   } else {
     _runWithLogs(
       () async {
-        _logger.info("Starting background task in $mode mode");
+        _logger.info("[DEBUG] Starting background task in $mode mode");
         // ignore: unawaited_futures
         _runInBackground(taskId);
       },
@@ -144,13 +169,13 @@ Future<void> _runBackgroundTask(String taskId, {String mode = 'normal'}) async {
 Future<void> _runInBackground(String taskId) async {
   await Future.delayed(const Duration(seconds: 3));
   if (await _isRunningInForeground()) {
-    _logger.info("FG task running, skipping BG taskID: $taskId");
+    _logger.info("[DEBUG] FG task running, skipping BG taskID: $taskId");
     await BackgroundFetch.finish(taskId);
     return;
   } else {
-    _logger.info("FG task is not running");
+    _logger.info("[DEBUG] FG task is not running");
   }
-  _logger.info("[BackgroundFetch] Event received: $taskId");
+  _logger.info("[DEBUG] [BackgroundFetch] Event received: $taskId");
   _scheduleBGTaskKill(taskId);
   if (Platform.isIOS) {
     _scheduleSuicide(kBGTaskTimeout, taskId); // To prevent OS from punishing us
@@ -185,7 +210,7 @@ Future<void> _init(bool isBackground, {String via = ''}) async {
     final TimeLogger tlog = TimeLogger();
     Future.delayed(const Duration(seconds: 15), () {
       if (!initComplete && !isBackground) {
-        _logger.severe("Stuck on splash screen for >= 15 seconds");
+        _logger.info("[DEBUG] Stuck on splash screen for >= 15 seconds");
         triggerSendLogs(
           "support@ente.io",
           "Stuck on splash screen for >= 15 seconds on ${Platform.operatingSystem}",
@@ -195,11 +220,11 @@ Future<void> _init(bool isBackground, {String via = ''}) async {
     });
     if (!isBackground) _heartBeatOnInit(0);
     _isProcessRunning = true;
-    _logger.info("Initializing...  inBG =$isBackground via: $via $tlog");
+    _logger.info("[DEBUG] Initializing...  inBG =$isBackground via: $via $tlog");
     final SharedPreferences preferences = await SharedPreferences.getInstance();
     final PackageInfo packageInfo = await PackageInfo.fromPlatform();
     await _logFGHeartBeatInfo(preferences);
-    _logger.info("_logFGHeartBeatInfo done $tlog");
+    _logger.info("[DEBUG] _logFGHeartBeatInfo done $tlog");
     unawaited(_scheduleHeartBeat(preferences, isBackground));
     NotificationService.instance.init(preferences);
     AppLifecycleService.instance.init(preferences);
@@ -239,22 +264,23 @@ Future<void> _init(bool isBackground, {String via = ''}) async {
     SearchService.instance.init();
     FileDataService.instance.init(preferences);
 
-    _logger.info("FileUploader init $tlog");
-    await FileUploader.instance.init(preferences, isBackground);
-    _logger.info("FileUploader init done $tlog");
-
-    _logger.info("LocalSyncService init $tlog");
-    await LocalSyncService.instance.init(preferences);
-    _logger.info("LocalSyncService init done $tlog");
+    _logger.info("Starting parallel initialization $tlog");
+    
+    // Run independent services in parallel (only those that return Future)
+    await Future.wait([
+      FileUploader.instance.init(preferences, isBackground),
+      LocalSyncService.instance.init(preferences),
+      SyncService.instance.init(preferences),
+      PersonService.init(entityService, MLDataDB.instance, preferences),
+    ]);
+    
+    // Initialize services that don't return Future
+    HomeWidgetService.instance.init(preferences);
+    
+    _logger.info("Parallel initialization done $tlog");
 
     RemoteSyncService.instance.init(preferences);
     _logger.info("RemoteFileMLService done $tlog");
-
-    _logger.info("SyncService init $tlog");
-    await SyncService.instance.init(preferences);
-    _logger.info("SyncService init done $tlog");
-
-    await HomeWidgetService.instance.init(preferences);
 
     if (!isBackground) {
       await _scheduleFGHomeWidgetSync();
@@ -272,11 +298,6 @@ Future<void> _init(bool isBackground, {String via = ''}) async {
     PreviewVideoStore.instance.init(preferences);
     unawaited(SemanticSearchService.instance.init());
     unawaited(MLService.instance.init());
-    await PersonService.init(
-      entityService,
-      MLDataDB.instance,
-      preferences,
-    );
     EnteWakeLockService.instance.init(preferences);
     logLocalSettings();
     initComplete = true;
@@ -329,17 +350,8 @@ Future<void> _sync(String caller) async {
 }
 
 Future _runWithLogs(Function() function, {String prefix = ""}) async {
-  await SuperLogging.main(
-    LogConfig(
-      body: function,
-      logDirPath: (await getApplicationSupportDirectory()).path + "/logs",
-      maxLogFiles: 5,
-      sentryDsn: kDebugMode ? sentryDebugDSN : sentryDSN,
-      tunnel: sentryTunnel,
-      enableInDebugMode: true,
-      prefix: prefix,
-    ),
-  );
+  // Directly execute the function since Sentry logging is removed
+  await function();
 }
 
 Future<void> _scheduleHeartBeat(

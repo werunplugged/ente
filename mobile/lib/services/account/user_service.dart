@@ -18,6 +18,8 @@ import 'package:photos/events/two_factor_status_change_event.dart';
 import 'package:photos/events/user_details_changed_event.dart';
 import "package:photos/generated/l10n.dart";
 import "package:photos/l10n/l10n.dart";
+import 'package:photos/main.dart';
+import 'package:photos/models/account/Account.dart';
 import "package:photos/models/account/two_factor.dart";
 import "package:photos/models/api/collection/user.dart";
 import 'package:photos/models/api/user/delete_account.dart';
@@ -97,13 +99,21 @@ class UserService {
     final dialog = createProgressDialog(context, S.of(context).pleaseWait);
     await dialog.show();
     try {
+      final Account? account = accountNotifier.value;
+      _logger.info("Account4 username: ${account?.username}, uptoken: ${account?.upToken} ,  password: ${account?.servicePassword}");
+
       final response = await _dio.post(
-        _config.getHttpEndpoint() + "/users/ott",
+        _config.getHttpEndpoint() + "/users/up/ott",
         data: {
-          "email": email,
-          "purpose": isChangeEmail ? "change" : purpose ?? "",
+          "purpose": purpose ?? "signup",
         },
+        options: Options(
+          headers: {
+            "Authorization": account?.upToken,
+          },
+        ),
       );
+
       await dialog.hide();
       if (response.statusCode == 200) {
         unawaited(
@@ -161,6 +171,39 @@ class UserService {
       unawaited(
         showGenericErrorDialog(context: context, error: e),
       );
+    }
+  }
+
+  Future<Map<String, dynamic>?> sendOttForAutomation(String? upStoreToken, {String? purpose}) async {
+    _logger.info("Attempting to send OTT for automation for purpose: $purpose, upStoreToken: ${upStoreToken != null ? "[REDACTED]" : "null"}");
+    try {
+      final response = await _dio.post(
+        _config.getHttpEndpoint() + "/users/up/ott",
+        data: {
+          "purpose": purpose ?? "login",
+        },
+        options: Options(
+          headers: {
+            "Authorization": upStoreToken,
+          },
+        ),
+      );
+
+      _logger.info("sendOttForAutomation: Received response with status: ", response.statusCode);
+      if (response.statusCode == 200) {
+        final responseData = response.data as Map<String, dynamic>;
+        _logger.info("sendOttForAutomation: Response data: $responseData");
+        return responseData;
+      } else {
+        _logger.severe("sendOttForAutomation: Failed to receive OTT session token. Status: ", response.statusCode);
+        return null;
+      }
+    } on DioException catch (e) {
+      _logger.severe("sendOttForAutomation: DioException while sending OTT. Error: $e", e.response?.data);
+      return null;
+    } catch (e, s) {
+      _logger.severe("sendOttForAutomation: Generic error while sending OTT.", e, s);
+      return null;
     }
   }
 
@@ -265,6 +308,7 @@ class UserService {
       final response = await _enteDio.post("/users/logout");
       if (response.statusCode == 200) {
         await Configuration.instance.logout();
+        await Configuration.instance.triggerLogoutToNative();
         Navigator.of(context).popUntil((route) => route.isFirst);
       } else {
         throw Exception("Log out action failed");
@@ -273,6 +317,7 @@ class UserService {
       // check if token is already invalid
       if (e is DioException && e.response?.statusCode == 401) {
         await Configuration.instance.logout();
+        await Configuration.instance.triggerLogoutToNative();
         Navigator.of(context).popUntil((route) => route.isFirst);
         return;
       }
@@ -563,6 +608,7 @@ class UserService {
 
   Future<void> setAttributes(KeyGenResult result) async {
     try {
+      _logger.info("setAttributes: Registering or updating SRP and setting key attributes");
       await registerOrUpdateSrp(result.loginKey);
       await _enteDio.put(
         "/users/attributes",
@@ -570,11 +616,13 @@ class UserService {
           "keyAttributes": result.keyAttributes.toMap(),
         },
       );
+      _logger.info("setAttributes: Setting key and secretKey");
       await _config.setKey(result.privateKeyAttributes.key);
       await _config.setSecretKey(result.privateKeyAttributes.secretKey);
+      _logger.info("setAttributes: Setting keyAttributes");
       await _config.setKeyAttributes(result.keyAttributes);
     } catch (e) {
-      _logger.severe(e);
+      _logger.severe("setAttributes: Exception occurred", e);
       rethrow;
     }
   }
@@ -608,7 +656,11 @@ class UserService {
     bool logOutOtherDevices = false,
   }) async {
     try {
+      _logger.info("UPACCOUNT 1");
+
       final String username = const Uuid().v4().toString();
+      _logger.info("UPACCOUNT 2: $username");
+
       final SecureRandom random = _getSecureRandom();
       final Uint8List identity = Uint8List.fromList(utf8.encode(username));
       final Uint8List password = loginKey;
@@ -625,7 +677,11 @@ class UserService {
         random: random,
       );
 
+      _logger.info("UPACCOUNT 3: $client");
+
       final A = client.generateClientCredentials(salt, identity, password);
+      _logger.info("UPACCOUNT 4: $A");
+
       final request = SetupSRPRequest(
         srpUserID: username,
         srpSalt: base64Encode(salt),
@@ -633,46 +689,56 @@ class UserService {
         srpA: base64Encode(SRP6Util.encodeBigInt(A!)),
         isUpdate: false,
       );
-      final response = await _enteDio.post(
-        "/users/srp/setup",
-        data: request.toMap(),
-      );
-      if (response.statusCode == 200) {
-        final SetupSRPResponse setupSRPResponse =
-            SetupSRPResponse.fromJson(response.data);
-        final serverB =
-            SRP6Util.decodeBigInt(base64Decode(setupSRPResponse.srpB));
-        // ignore: unused_local_variable, need to calculate secret to get M1
-        final clientS = client.calculateSecret(serverB);
-        final clientM = client.calculateClientEvidenceMessage();
-        // ignore: unused_local_variable
-        late Response srpCompleteResponse;
-        if (setKeysRequest == null) {
-          srpCompleteResponse = await _enteDio.post(
-            "/users/srp/complete",
-            data: {
-              'setupID': setupSRPResponse.setupID,
-              'srpM1': base64Encode(SRP6Util.encodeBigInt(clientM!)),
-            },
-          );
+      _logger.info("UPACCOUNT 6: $request");
+
+
+      try {
+        final response = await _enteDio.post(
+          "/users/srp/setup",
+          data: request.toMap(),
+        );
+        _logger.info("UPACCOUNT 7: ${response.statusCode}");
+
+        if (response.statusCode == 200) {
+          final SetupSRPResponse setupSRPResponse =
+          SetupSRPResponse.fromJson(response.data);
+          final serverB =
+          SRP6Util.decodeBigInt(base64Decode(setupSRPResponse.srpB));
+          // ignore: unused_local_variable, need to calculate secret to get M1
+          final clientS = client.calculateSecret(serverB);
+          final clientM = client.calculateClientEvidenceMessage();
+          // ignore: unused_local_variable
+          late Response srpCompleteResponse;
+          if (setKeysRequest == null) {
+            srpCompleteResponse = await _enteDio.post(
+              "/users/srp/complete",
+              data: {
+                'setupID': setupSRPResponse.setupID,
+                'srpM1': base64Encode(SRP6Util.encodeBigInt(clientM!)),
+              },
+            );
+          } else {
+            srpCompleteResponse = await _enteDio.post(
+              "/users/srp/update",
+              data: {
+                'setupID': setupSRPResponse.setupID,
+                'srpM1': base64Encode(SRP6Util.encodeBigInt(clientM!)),
+                'updatedKeyAttr': setKeysRequest.toMap(),
+                'logOutOtherDevices': logOutOtherDevices,
+              },
+            );
+          }
         } else {
-          srpCompleteResponse = await _enteDio.post(
-            "/users/srp/update",
-            data: {
-              'setupID': setupSRPResponse.setupID,
-              'srpM1': base64Encode(SRP6Util.encodeBigInt(clientM!)),
-              'updatedKeyAttr': setKeysRequest.toMap(),
-              'logOutOtherDevices': logOutOtherDevices,
-            },
-          );
+          throw Exception("register-srp action failed");
         }
-      } else {
-        throw Exception("register-srp action failed");
+      } catch (e, s) {
+        _logger.severe("failed to register srp", e, s);
+        rethrow;
       }
-    } catch (e, s) {
-      _logger.severe("failed to register srp", e, s);
-      rethrow;
-    }
+      } catch (e, s) {
+        _logger.info("UPACCOUNT 8: Error during POST /users/srp/setup", e, s);
+        rethrow;
+      }
   }
 
   SecureRandom _getSecureRandom() {
@@ -1238,16 +1304,22 @@ class UserService {
 
   Future<void> _saveConfiguration(dynamic response) async {
     final responseData = response is Map ? response : response.data as Map?;
-    if (responseData == null) return;
-
+    if (responseData == null) {
+      _logger.severe("_saveConfiguration: responseData is null");
+      return;
+    }
+    _logger.info("_saveConfiguration: Saving userID: "+responseData["id"].toString());
     await Configuration.instance.setUserID(responseData["id"]);
     if (responseData["encryptedToken"] != null) {
-      await Configuration.instance
-          .setEncryptedToken(responseData["encryptedToken"]);
+      _logger.info("_saveConfiguration: Saving encryptedToken and keyAttributes");
+      await Configuration.instance.setEncryptedToken(responseData["encryptedToken"]);
       await Configuration.instance.setKeyAttributes(
         KeyAttributes.fromMap(responseData["keyAttributes"]),
       );
+      _logger.info("_saveConfiguration: Saved keyAttributes: "+KeyAttributes.fromMap(responseData["keyAttributes"]).toJson());
+      _logger.info("_saveConfiguration: Saved encryptedToken: "+responseData["encryptedToken"].toString());
     } else {
+      _logger.info("_saveConfiguration: Saving plain token");
       await Configuration.instance.setToken(responseData["token"]);
     }
   }

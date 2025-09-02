@@ -45,7 +45,7 @@ android {
     sourceSets {
         main.java.srcDirs += 'src/main/kotlin'
     }
-    
+
     lintOptions {
         disable 'InvalidPackage'
         warningsAsErrors false
@@ -53,7 +53,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "io.ente.photos"
+        applicationId = "com.unplugged.photos"
         minSdk = 26
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
@@ -61,48 +61,72 @@ android {
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         multiDexEnabled true
         consumerProguardFiles 'proguard-rules.pro'
+
+        // NDK ABI filters removed to avoid conflict with splits configuration
+    }
+
+    splits {
+        abi {
+            enable true
+            reset()
+            include 'arm64-v8a'
+            universalApk false
+        }
     }
 
     signingConfigs {
-       release {
-           storeFile keystoreProperties['storeFile'] ? file(keystoreProperties['storeFile']) : System.getenv("SIGNING_KEY_PATH") ? file(System.getenv("SIGNING_KEY_PATH")) : null
-           keyAlias keystoreProperties['keyAlias'] ? keystoreProperties['keyAlias'] : System.getenv("SIGNING_KEY_ALIAS")
-           keyPassword keystoreProperties['keyPassword'] ? keystoreProperties['keyPassword'] : System.getenv("SIGNING_KEY_PASSWORD")
-           storePassword keystoreProperties['storePassword'] ? keystoreProperties['storePassword'] : System.getenv("SIGNING_STORE_PASSWORD")
-       }
+        release {
+            storeFile keystoreProperties['storeFile'] ? file(keystoreProperties['storeFile']) : System.getenv("SIGNING_KEY_PATH") ? file(System.getenv("SIGNING_KEY_PATH")) : null
+            keyAlias keystoreProperties['keyAlias'] ? keystoreProperties['keyAlias'] : System.getenv("SIGNING_KEY_ALIAS")
+            keyPassword keystoreProperties['keyPassword'] ? keystoreProperties['keyPassword'] : System.getenv("SIGNING_KEY_PASSWORD")
+            storePassword keystoreProperties['storePassword'] ? keystoreProperties['storePassword'] : System.getenv("SIGNING_STORE_PASSWORD")
+
+        }
+
+        debug {
+            keyAlias 'up_dev_key'
+            keyPassword 'ntH_pmn23f$5'
+            storeFile file('./signature/up_dev.keystore')
+            storePassword 'ntH_pmn23f$5'
+            v2SigningEnabled true
+        }
     }
-    
+
     flavorDimensions "default"
     productFlavors {
         independent {
             dimension "default"
-            applicationIdSuffix ".independent"
+//            applicationIdSuffix ".independent"
         }
         dev {
             dimension "default"
-            applicationIdSuffix ".dev"
+//            applicationIdSuffix ".dev"
         }
-        playstore {
-            dimension "default"
-        }
-        fdroid {
-            dimension "default"
-            applicationIdSuffix ".fdroid"
-        }
+        //       playstore {
+        //           dimension "default"
+        //       }
+        //       fdroid {
+        //           dimension "default"//
+        //           applicationIdSuffix ".fdroid"
+        //       }
     }
 
     buildTypes {
         release {
-            signingConfig signingConfigs.release
+            minifyEnabled true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            //signingConfig signingConfigs.release
+            //signingConfig signingConfigs.debug
+            //debuggable true
         }
         debug {
-          applicationIdSuffix '.debug'
-          versionNameSuffix "-debug"
-          externalNativeBuild {
-            cmake {
-              arguments "-DANDROID_PACKAGE_NAME=${android.defaultConfig.applicationId}${applicationIdSuffix}"
+            debuggable true
+            versionNameSuffix "-debug"
+            externalNativeBuild {
+                cmake {
+                    arguments "-DANDROID_PACKAGE_NAME=${android.defaultConfig.applicationId}${applicationIdSuffix}"
+                }
             }
-          }
         }
     }
 
@@ -122,8 +146,8 @@ rootProject.allprojects {
                 if (details.requested.group == 'com.github.bumptech.glide'
                         && details.requested.name.contains('glide')) {
                     details.useVersion "4.15.1"
+                }
             }
-          }
         }
     }
 }
@@ -133,7 +157,6 @@ flutter {
 }
 
 dependencies {
-    implementation 'io.sentry:sentry-android:2.0.0'
     implementation 'org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.8.21'
     implementation 'org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.0'
     implementation 'com.android.support:multidex:1.0.3'

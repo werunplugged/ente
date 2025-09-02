@@ -9,7 +9,6 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:logging/logging.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:photos/core/constants.dart';
-import 'package:photos/core/error-reporting/super_logging.dart';
 import 'package:photos/core/event_bus.dart';
 import 'package:photos/db/collections_db.dart';
 import 'package:photos/db/files_db.dart';
@@ -47,6 +46,7 @@ class Configuration {
   );
 
   static const emailKey = "email";
+  static const usernameKey = "username";
   static const foldersToBackUpKey = "folders_to_back_up";
   static const keyAttributesKey = "key_attributes";
   static const keyKey = "key";
@@ -66,6 +66,7 @@ class Configuration {
   static const anonymousUserIDKey = "anonymous_user_id";
   static const endPointKey = "endpoint";
   static final _logger = Logger("Configuration");
+  static const MethodChannel _loginChannel = MethodChannel('ente_login_channel');
 
   String? _cachedToken;
   late String _documentsDirectory;
@@ -112,9 +113,8 @@ class Configuration {
         }
         await _migrateSecurityStorageToFirstUnlock();
       }
-      SuperLogging.setUserID(await _getOrCreateAnonymousUserID()).ignore();
     } catch (e, s) {
-      _logger.severe("Configuration init failed", e, s);
+      _logger.info("[DEBUG] Configuration init failed", e, s);
       /*
       Check if it's a known is related to reading secret from secure storage
       on android https://github.com/mogol/flutter_secure_storage/issues/541
@@ -152,15 +152,14 @@ class Configuration {
               skippedTempUploadFiles++;
               continue;
             }
-            _logger.info("Deleting file: ${file.path}");
+            _logger.info("[DEBUG] Deleting file: ${file.path}");
             await file.delete();
           } else if (file is Directory) {
             await file.delete(recursive: true);
           }
         }
         await _preferences.setInt(lastTempFolderClearTimeKey, currentTime);
-        _logger.info(
-          "Cleared temp folder except $skippedTempUploadFiles upload files",
+        _logger.info("[DEBUG] Cleared temp folder except $skippedTempUploadFiles upload files",
         );
       } else {
         _logger.info("Skipping temp folder clear");
@@ -197,6 +196,14 @@ class Configuration {
     await IgnoredFilesService.instance.reset();
     await TrashDB.instance.clearTable();
     unawaited(HomeWidgetService.instance.clearWidget(autoLogout));
+    
+    // Clear native SharedPreferences username on logout
+    try {
+      await _loginChannel.invokeMethod('clearUsername');
+    } catch (e) {
+      _logger.warning('Failed to clear native username on logout', e);
+    }
+    
     if (!autoLogout) {
       // Following services won't be initialized if it's the case of autoLogout
       FileUploader.instance.clearCachedUploadURLs();
@@ -332,8 +339,8 @@ class Configuration {
         CryptoUtil.base642bin(attributes.keyDecryptionNonce),
       );
     } catch (e) {
-      _logger.severe('master-key decryption failed', e);
-      throw Exception("Incorrect password");
+      _logger.info('[DEBUG] master-key decryption failed', e);
+      throw Exception("[DEBUG] Incorrect password");
     }
     await setKey(CryptoUtil.bin2base64(key));
     final secretKey = CryptoUtil.decryptSync(
@@ -350,6 +357,7 @@ class Configuration {
     await setToken(
       CryptoUtil.bin2base64(token, urlSafe: true),
     );
+    _logger.info('[DEBUG] decryptSecretsAndGetKeyEncKey: Token saved successfully.');
     return keyEncryptionKey;
   }
 
@@ -399,7 +407,7 @@ class Configuration {
         CryptoUtil.base642bin(attributes.masterKeyDecryptionNonce!),
       );
     } catch (e) {
-      _logger.severe(e);
+      _logger.info(e);
       rethrow;
     }
     await setKey(CryptoUtil.bin2base64(masterKey));
@@ -435,16 +443,20 @@ class Configuration {
 
   String? getToken() {
     _cachedToken ??= _preferences.getString(tokenKey);
+    _logger.info('[DEBUG] getToken: token read: '
+        '${_cachedToken != null ? _cachedToken!.substring(0, _cachedToken!.length > 8 ? 8 : _cachedToken!.length) + '...' : 'null'}');
     return _cachedToken;
   }
 
   bool isLoggedIn() {
+    _logger.info('[DEBUG] isLoggedIn: ${getToken() != null}');
     return getToken() != null;
   }
 
   Future<void> setToken(String token) async {
     _cachedToken = token;
     await _preferences.setString(tokenKey, token);
+    _logger.info('[DEBUG] setToken: token saved: ${token.substring(0, token.length > 8 ? 8 : token.length)}...');
     Bus.instance.fire(SignedInEvent());
   }
 
@@ -462,6 +474,14 @@ class Configuration {
 
   Future<void> setEmail(String email) async {
     await _preferences.setString(emailKey, email);
+  }
+
+  Future<String?> getUsername() async {
+    return _preferences.getString(usernameKey);
+  }
+
+  Future<void> setUsername(String username) async {
+    await _preferences.setString(usernameKey, username);
   }
 
   int? getUserID() {
@@ -660,5 +680,14 @@ class Configuration {
       await _preferences.setString(anonymousUserIDKey, Uuid().v4());
     }
     return _preferences.getString(anonymousUserIDKey)!;
+  }
+
+  Future<void> triggerLogoutToNative() async {
+    try {
+      await _loginChannel.invokeMethod('logout');
+      _logger.info('[DEBUG] Logout request sent to native code');
+    } catch (e) {
+      _logger.info('[DEBUG]Failed to send logout request to native code', e);
+    }
   }
 }
