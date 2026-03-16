@@ -11,7 +11,11 @@ import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugins.GeneratedPluginRegistrant
+import android.Manifest
 import android.accounts.AccountManager
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.core.content.ContextCompat
 
 class MainActivity : FlutterFragmentActivity() {
     // Channel for receiving account details from LoginActivity
@@ -138,6 +142,18 @@ class MainActivity : FlutterFragmentActivity() {
     }
 
     /**
+     * Checks if the app has permission to read media files (images/videos).
+     */
+    private fun hasMediaReadPermission(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_VIDEO) == PackageManager.PERMISSION_GRANTED ||
+                ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_IMAGES) == PackageManager.PERMISSION_GRANTED
+        } else {
+            ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
+        }
+    }
+
+    /**
      * For media intents, resolves duplicate/invalid URIs to a valid single-item URI.
      * Returns the original URI if resolution is not needed.
      */
@@ -146,6 +162,15 @@ class MainActivity : FlutterFragmentActivity() {
 
         val uri = intent.data ?: return null
         Log.d("UpEnte", "[DEBUG] Processing media URI: $uri")
+
+        // If the URI is a MediaStore URI and we don't have media permissions,
+        // clear intent data to prevent SecurityException crash in media_extension plugin.
+        // The app will open to the permissions screen instead.
+        if (uri.toString().startsWith("content://media/") && !hasMediaReadPermission()) {
+            Log.w("UpEnte", "[DEBUG] No media permission for MediaStore URI, clearing intent data to prevent crash")
+            intent.data = null
+            return null
+        }
 
         // Try to resolve the URI to handle duplicates
         val resolvedUri = resolveToSingleItemUri(uri)
