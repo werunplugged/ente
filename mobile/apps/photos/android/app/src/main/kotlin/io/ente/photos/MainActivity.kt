@@ -339,12 +339,7 @@ class MainActivity : FlutterFragmentActivity() {
     override fun onStart() {
         super.onStart()
         accountManager = AccountManager.get(this)
-        val packageName = applicationContext.packageName
-        val accountType = if (packageName.contains("dev") || packageName.contains("debug")) {
-            "com.unplugged.account.dev"
-        } else {
-            "com.unplugged.account"
-        }
+        val accountType = getString(R.string.account_type)
 
         val sharedPrefs = getSharedPreferences("ente_prefs", MODE_PRIVATE)
         val savedUsername = sharedPrefs.getString("username", null)

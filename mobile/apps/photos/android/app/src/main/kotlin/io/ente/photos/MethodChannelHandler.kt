@@ -90,28 +90,35 @@ class MethodChannelHandler {
                 }
 
                 "openAccountApp" -> {
-                    val accountPackage = context.getString(R.string.account_intent_package)
-                    val storePackage = context.getString(R.string.store_intent_package)
-
-                    val targetPackage = if (isPackageInstalled(accountPackage)) {
-                        Log.d("UpEnte", "Account app found: $accountPackage")
-                        accountPackage
-                    } else if (isPackageInstalled(storePackage)) {
-                        Log.d("UpEnte", "Account app not found, using store: $storePackage")
-                        storePackage
-                    } else {
-                        Log.d("UpEnte", "Neither account app nor store found")
+                    val authorityUri = Uri.parse("content://${context.getString(R.string.account_provider_authority)}")
+                    try {
+                        val providerResult = context.contentResolver.call(authorityUri, "get_service_credentials", "service_1", null)
+                        if (providerResult != null) {
+                            val servicePassword = providerResult.getString("service_password") ?: ""
+                            val upToken = providerResult.getString("up_token") ?: ""
+                            val username = providerResult.getString("username") ?: ""
+                            if (servicePassword.isNotEmpty()) {
+                                result.success(mapOf(
+                                    "service_password" to servicePassword,
+                                    "up_token" to upToken,
+                                    "username" to username
+                                ))
+                                return
+                            }
+                        }
+                        result.error(
+                            "NO_CREDENTIALS",
+                            "No credentials available from account app",
+                            null
+                        )
+                    } catch (e: Exception) {
+                        Log.e("UpEnte", "ContentProvider call failed", e)
                         result.error(
                             "ACCOUNT_APP_ERROR",
-                            "Failed to open account app",
-                            "Unable to launch account app"
+                            "Failed to fetch credentials from account app",
+                            e.message
                         )
-                        return
                     }
-
-                    openAccountApp(targetPackage)
-                    result.success(true)
-                    destroyApp()
                 }
 
                 "openAccountAppForSync" -> {
@@ -179,26 +186,6 @@ class MethodChannelHandler {
                 true
             } catch (e: Exception) {
                 false
-            }
-        }
-
-        private fun openAccountApp(packageName: String): Boolean {
-            try {
-                Log.d("UpEnte", "Opening account app with package: $packageName")
-                val accountIntent = Intent().apply {
-                    component = android.content.ComponentName(
-                        packageName,
-                        "com.unplugged.account.ui.thirdparty.ThirdPartyCredentialsActivity"
-                    )
-                    putExtra("action", "service_1")
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                }
-                context.startActivity(accountIntent)
-                Log.d("UpEnte", "Account app opened successfully")
-                return true
-            } catch (e: Exception) {
-                Log.e("UpEnte", "Failed to open account app: ${e.message}", e)
-                return false
             }
         }
 
