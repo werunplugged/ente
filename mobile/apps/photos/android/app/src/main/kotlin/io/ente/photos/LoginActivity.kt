@@ -37,7 +37,11 @@ class LoginActivity : AppCompatActivity() {
         val accountUsername = account?.let { accountManager.getUserData(it, "username") }
 
         if (savedUsername.isNullOrEmpty()) {
-            // No previous login, fetch credentials via ContentProvider
+            if (account == null) {
+                Log.d("UpEnte", "[DEBUG] No saved username and no UP account on device")
+                openNotConnectedDialog()
+                return
+            }
             Log.d("UpEnte", "[DEBUG] No saved username, fetching credentials via ContentProvider")
             fetchCredentialsFromProvider()
             return

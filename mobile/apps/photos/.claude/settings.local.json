@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(flutter build:*)",
+      "Bash(flutter pub:*)",
+      "Bash(flutter_rust_bridge_codegen --version)",
+      "Bash(cargo install:*)",
+      "Bash(export PATH=\"$HOME/.cargo/bin:$PATH\")",
+      "Bash(cargo --version)",
+      "Read(//Users/maksimnovikov/.cargo/bin/**)",
+      "Read(//opt/homebrew/bin/**)",
+      "Read(//usr/local/bin/**)",
+      "Bash(curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs)",
+      "Bash(sh -s -- -y)",
+      "Bash(. \"$HOME/.cargo/env\")",
+      "Bash(flutter_rust_bridge_codegen generate:*)",
+      "Bash(adb logcat:*)",
+      "Bash(~/Library/Android/sdk/platform-tools/adb logcat:*)"
+    ]
+  }
+}

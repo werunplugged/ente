@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xargs basename:*)",
+      "Bash(flutter --version)",
+      "Bash(flutter pub:*)",
+      "Bash(flutter build:*)",
+      "Bash(grep -r \"up_account\\\\|AccountProvider\" /Users/maksimnovikov/AndroidStudioProjects/development/up_ente/mobile/apps/photos --include=*.kt --include=*.gradle --include=*.xml)",
+      "Bash(grep -r \"AccountProvider\\\\|up_account\\\\|com.unplugged.account.provider\" /Users/maksimnovikov/AndroidStudioProjects/development/up_ente/mobile/apps/photos/android --include=*.gradle --include=*.kt --include=*.java --include=*.xml)",
+      "Bash(find /Users/maksimnovikov/AndroidStudioProjects/development -type d -name *password*)",
+      "Bash(grep -E \"\\\\.kt$\")",
+      "Bash(find /Users/maksimnovikov/AndroidStudioProjects/development/up_ente/mobile/apps/photos -name .env* -o -name flavors.txt -o -name *flavor*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)"
+    ]
+  }
+}
