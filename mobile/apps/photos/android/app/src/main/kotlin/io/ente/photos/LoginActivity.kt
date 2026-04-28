@@ -38,8 +38,8 @@ class LoginActivity : AppCompatActivity() {
 
         if (savedUsername.isNullOrEmpty()) {
             if (account == null) {
-                Log.d("UpEnte", "[DEBUG] No saved username and no UP account on device")
-                openNotConnectedDialog()
+                Log.d("UpEnte", "[DEBUG] No saved username and no UP account on device, launching account app")
+                launchGenerateCredentials()
                 return
             }
             Log.d("UpEnte", "[DEBUG] No saved username, fetching credentials via ContentProvider")
@@ -189,21 +189,6 @@ class LoginActivity : AppCompatActivity() {
             .setNegativeButton("Contact Support") { _, _ ->
                 openSupportApp()
                 finish()
-            }
-            .setCancelable(false)
-            .show()
-    }
-
-    private fun openNotConnectedDialog() {
-        AlertDialog.Builder(this)
-            .setTitle("Not Connected")
-            .setMessage("You are not connected to any user. Please connect a user and try again.")
-            .setPositiveButton("Exit") { _, _ ->
-                val sharedPrefs = getSharedPreferences("ente_prefs", MODE_PRIVATE)
-                sharedPrefs.edit().clear().apply()
-                val flutterPrefs = getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE)
-                flutterPrefs.edit().clear().apply()
-                finishAndRemoveTask()
             }
             .setCancelable(false)
             .show()
