@@ -17,6 +17,8 @@ class LoginActivity : AppCompatActivity() {
     companion object {
         private const val ACCOUNT_ACTIVITY_CLASS_NAME =
             "com.unplugged.account.ui.thirdparty.ThirdPartyCredentialsActivity"
+        private const val AUTH_ACTIVITY_CLASS_NAME =
+            "com.unplugged.account.ui.auth.AuthActivity"
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -38,8 +40,8 @@ class LoginActivity : AppCompatActivity() {
 
         if (savedUsername.isNullOrEmpty()) {
             if (account == null) {
-                Log.d("UpEnte", "[DEBUG] No saved username and no UP account on device, launching account app")
-                launchGenerateCredentials()
+                Log.d("UpEnte", "[DEBUG] No saved username and no UP account on device, launching auth")
+                launchAuthActivity()
                 return
             }
             Log.d("UpEnte", "[DEBUG] No saved username, fetching credentials via ContentProvider")
@@ -99,6 +101,28 @@ class LoginActivity : AppCompatActivity() {
             Log.e("UpEnte", "ContentProvider call failed", e)
             openErrorDialog()
         }
+    }
+
+    private fun launchAuthActivity() {
+        val accountPackage = getString(R.string.account_intent_package)
+        val storePackage = getString(R.string.store_intent_package)
+
+        val targetPackage = if (isPackageInstalled(accountPackage)) {
+            accountPackage
+        } else if (isPackageInstalled(storePackage)) {
+            storePackage
+        } else {
+            Log.d("UpEnte", "Neither account app nor store found for auth")
+            finish()
+            return
+        }
+
+        val authIntent = Intent().apply {
+            component = ComponentName(targetPackage, AUTH_ACTIVITY_CLASS_NAME)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        startActivity(authIntent)
+        finish()
     }
 
     private fun launchGenerateCredentials() {
