@@ -951,8 +951,9 @@ class _HomeWidgetState extends State<HomeWidget> with WidgetsBindingObserver {
     final isLoginFlowActive = prefs.getBool(_loginFlowActiveKey) ?? false;
 
     if (isLoginFlowActive) {
-      _logger.info('Login flow already active, showing spinner');
+      _logger.info('Login flow already active, resuming LoadingPage');
       _isLoadingPageActive = true;
+      _shouldShowLoadingPage = true;
       if (mounted) {
         setState(() {});
       }
