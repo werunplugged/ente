@@ -117,7 +117,7 @@ android {
         variant.outputs.all { output ->
             def abi = output.getFilter(com.android.build.OutputFile.ABI)
             def abiSuffix = abi ? "_${abi}" : ""
-            outputFileName = "up_ente_${variant.versionName}_${variant.buildType.name}${abiSuffix}.apk"
+            outputFileName = "up_photos_${variant.versionName}_${variant.buildType.name}${abiSuffix}.apk"
         }
     }
 }
