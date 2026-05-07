@@ -11,7 +11,8 @@ Future<MediaExtentionAction> initIntentAction() async {
   try {
     mediaExtensionAction = await mediaExtensionPlugin.getIntentAction();
     _logger.info(
-        "Raw intent action: ${mediaExtensionAction.action}, type: ${mediaExtensionAction.type}, data: ${mediaExtensionAction.data}",);
+      "Raw intent action: ${mediaExtensionAction.action}, type: ${mediaExtensionAction.type}, data: ${mediaExtensionAction.data}",
+    );
 
     // Fix incorrect type detection for content URIs
     if (mediaExtensionAction.action == IntentAction.view &&
@@ -19,7 +20,8 @@ Future<MediaExtentionAction> initIntentAction() async {
       final correctedAction = _correctMediaType(mediaExtensionAction);
       if (correctedAction != mediaExtensionAction) {
         _logger.info(
-            "Corrected media type from ${mediaExtensionAction.type} to ${correctedAction.type}",);
+          "Corrected media type from ${mediaExtensionAction.type} to ${correctedAction.type}",
+        );
         mediaExtensionAction = correctedAction;
       }
     }
@@ -30,6 +32,21 @@ Future<MediaExtentionAction> initIntentAction() async {
     _logger.severe("Error in getIntentAction: $error");
     mediaExtensionAction = MediaExtentionAction(action: IntentAction.main);
   }
+
+  // When the app is opened via ACTION_VIEW but media permissions are denied,
+  // MainActivity clears the intent data to prevent a native crash. This results
+  // in action=VIEW with null data/type. Route to FileViewer with a fallback
+  // type so it can show a permission error instead of a loading screen.
+  if (mediaExtensionAction.action == IntentAction.view &&
+      mediaExtensionAction.data == null &&
+      mediaExtensionAction.type == null) {
+    _logger.info("VIEW intent with no data/type - likely permission denied");
+    mediaExtensionAction = MediaExtentionAction(
+      action: IntentAction.view,
+      type: MediaType.video,
+    );
+  }
+
   return mediaExtensionAction;
 }
 
