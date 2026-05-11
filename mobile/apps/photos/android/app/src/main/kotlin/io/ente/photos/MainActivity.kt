@@ -259,28 +259,45 @@ class MainActivity : FlutterFragmentActivity() {
     }
     
     private fun handleLoginIntent(intent: Intent) {
+        // Process logout signal first — pure-logout intents from LoginActivity
+        // carry no credentials, so this must run before the credential check below.
+        if (intent.getBooleanExtra("shouldLogout", false) && !pendingLogoutRestart) {
+            Log.d("UpEnte", "[DEBUG] Logout flag detected")
+            pendingLogoutRestart = true
+            pendingShouldLogout = true
+            if (methodChannel != null) {
+                Log.d("UpEnte", "[DEBUG] Flutter engine ready, invoking onLogoutRequested immediately")
+                MethodChannel(flutterEngine!!.dartExecutor.binaryMessenger, "ente_logout_channel")
+                    .invokeMethod("onLogoutRequested", null)
+                pendingShouldLogout = false
+            } else {
+                Log.d("UpEnte", "[DEBUG] Flutter engine not ready, queuing logout for configureFlutterEngine")
+            }
+            return
+        }
+
         val servicePassword = intent.getStringExtra("service_password")
         val upToken = intent.getStringExtra("up_token")
         val username = intent.getStringExtra("username")
-        
+
         // Additional validation of credential format
         if (servicePassword.isNullOrBlank() || upToken.isNullOrBlank() || username.isNullOrBlank()) {
             Log.d("UpEnte", "[DEBUG] One or more credentials is null/blank, returning")
             return
         }
-        
+
         // Validate username format (basic sanitization)
         if (!isValidUsername(username)) {
             Log.d("UpEnte", "[DEBUG] Username validation failed, returning")
             return
         }
-        
+
         val accountDetails = mapOf(
             "service_password" to servicePassword,
             "up_token" to upToken,
             "username" to username
         )
-        
+
         Log.d("UpEnte", "[DEBUG] Account details created, checking methodChannel")
 
         // Check if methodChannel is initialized (meaning configureFlutterEngine has run)
@@ -293,13 +310,6 @@ class MainActivity : FlutterFragmentActivity() {
             // Flutter engine not configured yet, or methodChannel not set up.
             // Store data to send when configureFlutterEngine is called.
             pendingAccountDetails = accountDetails
-        }
-        
-        // Handle logout flag from trusted source only (also requires valid token)
-        if (intent.getBooleanExtra("shouldLogout", false) && !pendingLogoutRestart) {
-            Log.d("UpEnte", "[DEBUG] Logout flag detected")
-            pendingLogoutRestart = true
-            pendingShouldLogout = true
         }
     }
     
