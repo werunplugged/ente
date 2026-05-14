@@ -3,4 +3,6 @@
     <string name="backup">backup debug</string>
     <string name="store_intent_package" translatable="false">com.unplugged.store.dev</string>
     <string name="account_intent_package" translatable="false">com.unplugged.account.dev</string>
+    <string name="account_provider_authority" translatable="false">com.unplugged.account.dev.provider</string>
+    <string name="account_type" translatable="false">com.unplugged.android.account.dev</string>
 </resources>

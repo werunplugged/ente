@@ -11,7 +11,11 @@ import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugins.GeneratedPluginRegistrant
+import android.Manifest
 import android.accounts.AccountManager
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.core.content.ContextCompat
 
 class MainActivity : FlutterFragmentActivity() {
     // Channel for receiving account details from LoginActivity
@@ -138,6 +142,18 @@ class MainActivity : FlutterFragmentActivity() {
     }
 
     /**
+     * Checks if the app has permission to read media files (images/videos).
+     */
+    private fun hasMediaReadPermission(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_VIDEO) == PackageManager.PERMISSION_GRANTED ||
+                ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_IMAGES) == PackageManager.PERMISSION_GRANTED
+        } else {
+            ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
+        }
+    }
+
+    /**
      * For media intents, resolves duplicate/invalid URIs to a valid single-item URI.
      * Returns the original URI if resolution is not needed.
      */
@@ -146,6 +162,15 @@ class MainActivity : FlutterFragmentActivity() {
 
         val uri = intent.data ?: return null
         Log.d("UpEnte", "[DEBUG] Processing media URI: $uri")
+
+        // If the URI is a MediaStore URI and we don't have media permissions,
+        // clear intent data to prevent SecurityException crash in media_extension plugin.
+        // The app will open to the permissions screen instead.
+        if (uri.toString().startsWith("content://media/") && !hasMediaReadPermission()) {
+            Log.w("UpEnte", "[DEBUG] No media permission for MediaStore URI, clearing intent data to prevent crash")
+            intent.data = null
+            return null
+        }
 
         // Try to resolve the URI to handle duplicates
         val resolvedUri = resolveToSingleItemUri(uri)
@@ -234,28 +259,45 @@ class MainActivity : FlutterFragmentActivity() {
     }
     
     private fun handleLoginIntent(intent: Intent) {
+        // Process logout signal first — pure-logout intents from LoginActivity
+        // carry no credentials, so this must run before the credential check below.
+        if (intent.getBooleanExtra("shouldLogout", false) && !pendingLogoutRestart) {
+            Log.d("UpEnte", "[DEBUG] Logout flag detected")
+            pendingLogoutRestart = true
+            pendingShouldLogout = true
+            if (methodChannel != null) {
+                Log.d("UpEnte", "[DEBUG] Flutter engine ready, invoking onLogoutRequested immediately")
+                MethodChannel(flutterEngine!!.dartExecutor.binaryMessenger, "ente_logout_channel")
+                    .invokeMethod("onLogoutRequested", null)
+                pendingShouldLogout = false
+            } else {
+                Log.d("UpEnte", "[DEBUG] Flutter engine not ready, queuing logout for configureFlutterEngine")
+            }
+            return
+        }
+
         val servicePassword = intent.getStringExtra("service_password")
         val upToken = intent.getStringExtra("up_token")
         val username = intent.getStringExtra("username")
-        
+
         // Additional validation of credential format
         if (servicePassword.isNullOrBlank() || upToken.isNullOrBlank() || username.isNullOrBlank()) {
             Log.d("UpEnte", "[DEBUG] One or more credentials is null/blank, returning")
             return
         }
-        
+
         // Validate username format (basic sanitization)
         if (!isValidUsername(username)) {
             Log.d("UpEnte", "[DEBUG] Username validation failed, returning")
             return
         }
-        
+
         val accountDetails = mapOf(
             "service_password" to servicePassword,
             "up_token" to upToken,
             "username" to username
         )
-        
+
         Log.d("UpEnte", "[DEBUG] Account details created, checking methodChannel")
 
         // Check if methodChannel is initialized (meaning configureFlutterEngine has run)
@@ -268,13 +310,6 @@ class MainActivity : FlutterFragmentActivity() {
             // Flutter engine not configured yet, or methodChannel not set up.
             // Store data to send when configureFlutterEngine is called.
             pendingAccountDetails = accountDetails
-        }
-        
-        // Handle logout flag from trusted source only (also requires valid token)
-        if (intent.getBooleanExtra("shouldLogout", false) && !pendingLogoutRestart) {
-            Log.d("UpEnte", "[DEBUG] Logout flag detected")
-            pendingLogoutRestart = true
-            pendingShouldLogout = true
         }
     }
     
@@ -339,12 +374,7 @@ class MainActivity : FlutterFragmentActivity() {
     override fun onStart() {
         super.onStart()
         accountManager = AccountManager.get(this)
-        val packageName = applicationContext.packageName
-        val accountType = if (packageName.contains("dev") || packageName.contains("debug")) {
-            "com.unplugged.account.dev"
-        } else {
-            "com.unplugged.account"
-        }
+        val accountType = getString(R.string.account_type)
 
         val sharedPrefs = getSharedPreferences("ente_prefs", MODE_PRIVATE)
         val savedUsername = sharedPrefs.getString("username", null)

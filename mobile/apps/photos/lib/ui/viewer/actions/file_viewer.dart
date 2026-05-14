@@ -6,6 +6,7 @@ import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 import "package:logging/logging.dart";
 import "package:media_extension/media_extension_action_types.dart";
+import "package:permission_handler/permission_handler.dart";
 import "package:photo_view/photo_view.dart";
 import "package:photos/services/app_lifecycle_service.dart";
 import "package:photos/utils/exif_util.dart";
@@ -29,12 +30,16 @@ class FileViewerState extends State<FileViewer> {
   final Logger _logger = Logger("FileViewer");
   double? aspectRatio;
 
+  bool get _hasMediaData =>
+      widget.sharedMediaFile?.path != null || action.data != null;
+
   @override
   void initState() {
     _logger.info("Initializing FileViewer");
     super.initState();
-    if (action.type == MediaType.video ||
-        widget.sharedMediaFile?.type == SharedMediaType.video) {
+    if (_hasMediaData &&
+        (action.type == MediaType.video ||
+            widget.sharedMediaFile?.type == SharedMediaType.video)) {
       _initializeVideoController();
     }
   }
@@ -135,6 +140,30 @@ class FileViewerState extends State<FileViewer> {
           Expanded(
             child: Center(
               child: (() {
+                if (!_hasMediaData) {
+                  return Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.lock_outline, size: 64),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Permission required',
+                        style: TextStyle(fontSize: 18),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Allow access to photos and videos to open this file',
+                        style: Theme.of(context).textTheme.bodySmall,
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 24),
+                      const OutlinedButton(
+                        onPressed: openAppSettings,
+                        child: Text('Open Settings'),
+                      ),
+                    ],
+                  );
+                }
                 if (action.type == MediaType.image ||
                     widget.sharedMediaFile?.type == SharedMediaType.image) {
                   try {
@@ -148,7 +177,8 @@ class FileViewerState extends State<FileViewer> {
                       // Handle content URI or base64 data
                       if (action.data!.startsWith('content://')) {
                         _logger.info(
-                            "Trying to display image from content URI: ${action.data}",);
+                          "Trying to display image from content URI: ${action.data}",
+                        );
                         // For content URIs, show error message since they're often malformed
                         return Column(
                           mainAxisAlignment: MainAxisAlignment.center,

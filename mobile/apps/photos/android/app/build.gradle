@@ -30,9 +30,9 @@ if (userPropertiesFile.exists()) {
 
 android {
     namespace = "io.ente.photos"
-    compileSdk = 35
+    compileSdk = 36
 //    ndkVersion = flutter.ndkVersion
-    ndkVersion = "27.0.12077973"
+    ndkVersion = "28.2.13676358"
 
     compileOptions {
         coreLibraryDesugaringEnabled = true
@@ -110,6 +110,14 @@ android {
                     arguments "-DANDROID_PACKAGE_NAME=${android.defaultConfig.applicationId}${applicationIdSuffix}"
                 }
             }
+        }
+    }
+
+    applicationVariants.all { variant ->
+        variant.outputs.all { output ->
+            def abi = output.getFilter(com.android.build.OutputFile.ABI)
+            def abiSuffix = abi ? "_${abi}" : ""
+            outputFileName = "up_photos_${variant.versionName}_${variant.buildType.name}${abiSuffix}.apk"
         }
     }
 }

@@ -209,4 +209,5 @@
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>   <!-- Needed for scheduling notifications -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/> <!-- Needed for scheduling notifications -->
+    <uses-permission android:name="com.unplugged.account.ACCOUNT_PROVIDER" />
 </manifest>
