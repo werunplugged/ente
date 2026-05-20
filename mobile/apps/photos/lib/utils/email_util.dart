@@ -13,14 +13,12 @@ import 'package:open_mail_app/open_mail_app.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:photos/core/configuration.dart';
-import 'package:photos/core/error-reporting/super_logging.dart';
 import "package:photos/generated/l10n.dart";
 import "package:photos/ui/common/progress_dialog.dart";
 import 'package:photos/ui/components/buttons/button_widget.dart';
 import 'package:photos/ui/components/dialog_widget.dart';
 import 'package:photos/ui/components/models/button_type.dart';
 import 'package:photos/ui/notification/toast.dart';
-import 'package:photos/ui/tools/debug/log_file_viewer.dart';
 import 'package:photos/utils/dialog_util.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -55,85 +53,8 @@ Future<void> sendLogs(
   String? subject,
   String? body,
 }) async {
-  // ignore: unawaited_futures
-  showDialogWidget(
-    context: context,
-    title: AppLocalizations.of(context).reportABug,
-    icon: Icons.bug_report_outlined,
-    body: AppLocalizations.of(context).logsDialogBody,
-    buttons: [
-      ButtonWidget(
-        isInAlert: true,
-        buttonType: ButtonType.neutral,
-        labelText: AppLocalizations.of(context).reportABug,
-        buttonAction: ButtonAction.first,
-        shouldSurfaceExecutionStates: false,
-        onTap: () async {
-          await _sendLogs(context, toEmail, subject, body);
-          if (postShare != null) {
-            postShare();
-          }
-        },
-      ),
-      //isInAlert is false here as we don't want to the dialog to dismiss
-      //on pressing this button
-      ButtonWidget(
-        buttonType: ButtonType.secondary,
-        labelText: AppLocalizations.of(context).viewLogs,
-        buttonAction: ButtonAction.second,
-        onTap: () async {
-          // ignore: unawaited_futures
-          showDialog(
-            useRootNavigator: false,
-            context: context,
-            builder: (BuildContext context) {
-              return LogFileViewer(SuperLogging.logFile!);
-            },
-            barrierColor: Colors.black87,
-            barrierDismissible: false,
-          );
-        },
-      ),
-      ButtonWidget(
-        buttonType: ButtonType.secondary,
-        labelText: AppLocalizations.of(context).exportLogs,
-        buttonAction: ButtonAction.third,
-        onTap: () async {
-          final zipFilePath = await getZippedLogsFile(context);
-          await exportLogs(context, zipFilePath);
-        },
-      ),
-      ButtonWidget(
-        isInAlert: true,
-        buttonType: ButtonType.secondary,
-        labelText: AppLocalizations.of(context).cancel,
-        buttonAction: ButtonAction.cancel,
-      ),
-    ],
-  );
-}
-
-Future<void> _sendLogs(
-  BuildContext context,
-  String toEmail,
-  String? subject,
-  String? body,
-) async {
-  final String zipFilePath = await getZippedLogsFile(context);
-  final Email email = Email(
-    recipients: [toEmail],
-    subject: subject ?? '',
-    body: body ?? '',
-    attachmentPaths: [zipFilePath],
-    isHTML: false,
-  );
-  try {
-    await FlutterEmailSender.send(email);
-  } catch (e, s) {
-    _logger.severe('email sender failed', e, s);
-    Navigator.of(context).pop();
-    await shareLogs(context, toEmail, zipFilePath);
-  }
+  await launchUrl(Uri.parse("https://support.unplugged.com"));
+  postShare?.call();
 }
 
 Future<void> triggerSendLogs(

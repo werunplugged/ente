@@ -23,19 +23,26 @@ class LoadingPhotosWidget extends StatefulWidget {
 }
 
 class _LoadingPhotosWidgetState extends State<LoadingPhotosWidget> {
+  static const _stallThreshold = Duration(seconds: 60);
+
   late StreamSubscription<SyncStatusUpdate> _firstImportEvent;
   StreamSubscription<LocalImportProgressEvent>? _importProgressEvent;
   String? _loadingMessage;
-  final oneMinuteOnScreen = ValueNotifier(false);
+  final importStalled = ValueNotifier(false);
+  Timer? _stallTimer;
+
+  void _resetStallTimer() {
+    _stallTimer?.cancel();
+    if (importStalled.value) importStalled.value = false;
+    _stallTimer = Timer(_stallThreshold, () {
+      if (mounted) importStalled.value = true;
+    });
+  }
 
   @override
   void initState() {
     super.initState();
-    Future.delayed(const Duration(seconds: 60), () {
-      if (mounted) {
-        oneMinuteOnScreen.value = true;
-      }
-    });
+    _resetStallTimer();
     _firstImportEvent =
         Bus.instance.on<SyncStatusUpdate>().listen((event) async {
       if (mounted && event.status == SyncStatus.completedFirstGalleryImport) {
@@ -65,6 +72,10 @@ class _LoadingPhotosWidgetState extends State<LoadingPhotosWidget> {
           Bus.instance.on<LocalImportProgressEvent>().listen((event) {
         _loadingMessage = AppLocalizations.of(context)
             .processingImport(folderName: event.folderName);
+        // Per-page progress events fire frequently during active import on
+        // any library size; reset the stall timer so the help icon only
+        // surfaces if events stop arriving for _stallThreshold (60 s).
+        _resetStallTimer();
         if (mounted) {
           setState(() {});
         }
@@ -76,7 +87,8 @@ class _LoadingPhotosWidgetState extends State<LoadingPhotosWidget> {
   void dispose() {
     _firstImportEvent.cancel();
     _importProgressEvent?.cancel();
-    oneMinuteOnScreen.dispose();
+    _stallTimer?.cancel();
+    importStalled.dispose();
     super.dispose();
   }
 
@@ -139,7 +151,7 @@ class _LoadingPhotosWidgetState extends State<LoadingPhotosWidget> {
       appBar: AppBar(
         actions: [
           ValueListenableBuilder(
-            valueListenable: oneMinuteOnScreen,
+            valueListenable: importStalled,
             builder: (context, value, _) {
               return value
                   ? IconButton(
