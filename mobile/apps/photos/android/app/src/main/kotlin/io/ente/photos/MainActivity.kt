@@ -400,12 +400,6 @@ class MainActivity : FlutterFragmentActivity() {
         } else {
             Log.d("UpEnte", "[DEBUG] No saved username, not triggering logout")
         }
-
-        // Register listener for future changes
-        accountManager.addOnAccountsUpdatedListener({ accountsInSystem ->
-            // Only check account state, do not trigger logout to Flutter here
-            // All forced logout is now handled via shouldLogout intent
-        }, null, false)
     }
 
     private fun triggerLogoutToFlutter() {
