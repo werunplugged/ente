@@ -103,13 +103,22 @@ android {
         }
         debug {
             debuggable true
-            applicationIdSuffix ".dev"
             versionNameSuffix "-debug"
-            externalNativeBuild {
-                cmake {
-                    arguments "-DANDROID_PACKAGE_NAME=${android.defaultConfig.applicationId}${applicationIdSuffix}"
-                }
-            }
+        }
+    }
+
+    flavorDimensions += "environment"
+    productFlavors {
+        production {
+            dimension "environment"
+        }
+        staging {
+            dimension "environment"
+            applicationIdSuffix ".staging"
+        }
+        development {
+            dimension "environment"
+            applicationIdSuffix ".dev"
         }
     }
 
@@ -126,7 +135,18 @@ android {
             } else {
                 abiSuffix = "_${abi}"
             }
-            outputFileName = "up_photos_${variant.versionName}_${variant.buildType.name}${abiSuffix}.apk"
+            def envSuffix = ""
+            def flavor = variant.flavorName.toLowerCase()
+            if (flavor == "staging") {
+                envSuffix = "_stage"
+            } else if (flavor == "development") {
+                envSuffix = "_dev"
+            }
+            // Strip the buildType's versionNameSuffix from the filename so we don't get
+            // "...1.2.154-debug_debug.apk" — the buildType.name already conveys it.
+            def cleanVersion = variant.versionName.replaceAll(/-debug$/, '')
+            // production gets no suffix so the release APK filename stays bit-identical
+            outputFileName = "up_photos${envSuffix}_${cleanVersion}_${variant.buildType.name}${abiSuffix}.apk"
         }
     }
 }
@@ -138,6 +158,11 @@ rootProject.allprojects {
                 if (details.requested.group == 'com.github.bumptech.glide'
                         && details.requested.name.contains('glide')) {
                     details.useVersion "4.15.1"
+                }
+                if (details.requested.group == 'androidx.glance'
+                        && details.requested.name == 'glance-appwidget') {
+                    details.useVersion '1.1.1'
+                    details.because('1.3.0-alpha01 requires compileSdk 37 / AGP 9.1.0; project on 36 / 8.6.0')
                 }
             }
         }

@@ -1,0 +1,8 @@
+<resources>
+    <string name="app_name">Stage Cloud Photos</string>
+    <string name="backup">backup</string>
+    <string name="store_intent_package" translatable="false">com.unplugged.store.staging</string>
+    <string name="account_intent_package" translatable="false">com.unplugged.account.staging</string>
+    <string name="account_provider_authority" translatable="false">com.unplugged.account.staging.provider</string>
+    <string name="account_type" translatable="false">com.unplugged.android.account.staging</string>
+</resources>

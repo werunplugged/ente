@@ -209,5 +209,7 @@
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>   <!-- Needed for scheduling notifications -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/> <!-- Needed for scheduling notifications -->
-    <uses-permission android:name="com.unplugged.account.ACCOUNT_PROVIDER" />
+    <!-- ACCOUNT_PROVIDER and THIRD_PARTY_ACTIVITY uses-permission declarations
+         live in per-env-flavor manifests (src/production, src/staging, src/development)
+         so each variant requests the correctly-suffixed permission of its peer account app. -->
 </manifest>

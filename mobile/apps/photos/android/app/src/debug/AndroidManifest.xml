@@ -15,6 +15,5 @@
         </intent-filter>
     </activity>
 </application>
-    <!-- Only add dev-specific overrides here. Activities and application block will be inherited from main manifest. -->
-    <uses-permission android:name="com.unplugged.account.dev.THIRD_PARTY_ACTIVITY" />
+    <!-- buildType-only overrides. env-specific uses-permission lives in per-env manifests (src/development etc.) -->
 </manifest>
