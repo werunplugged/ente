@@ -2,4 +2,5 @@
     package="io.ente.photos">
     <uses-permission android:name="com.unplugged.account.dev.ACCOUNT_PROVIDER" />
     <uses-permission android:name="com.unplugged.account.dev.THIRD_PARTY_ACTIVITY" />
+    <application android:label="Dev Cloud Photos" />
 </manifest>

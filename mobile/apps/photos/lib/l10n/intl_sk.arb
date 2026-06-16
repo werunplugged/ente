@@ -26,7 +26,7 @@
   "sendEmail": "Poslať email",
   "deleteRequestSLAText": "Vaša požiadavka bude spracovaná do 72 hodín.",
   "deleteEmailRequest": "Prosíme zašlite email na <warning>account-deletion@ente.io</warning> z vašej zaregistrovanej emailovej adresy.",
-  "entePhotosPerm": "Ente <i>potrebuje povolenie</i> na uchovávanie vašich fotiek",
+  "entePhotosPerm": "Cloud photos <i>potrebuje povolenie</i> na uchovávanie vašich fotiek",
   "ok": "Ok",
   "createAccount": "Vytvoriť účet",
   "createNewAccount": "Vytvoriť nový účet",

@@ -2,4 +2,5 @@
     package="io.ente.photos">
     <uses-permission android:name="com.unplugged.account.staging.ACCOUNT_PROVIDER" />
     <uses-permission android:name="com.unplugged.account.staging.THIRD_PARTY_ACTIVITY" />
+    <application android:label="Stage Cloud Photos" />
 </manifest>

@@ -199,7 +199,7 @@
     "description": "The text displayed above albums backed up to Ente",
     "type": "text"
   },
-  "onEnte": "บน <branding>ente</branding>",
+  "onEnte": "บน <branding>Cloud photos</branding>",
   "name": "ชื่อ",
   "newest": "ใหม่สุด",
   "lastUpdated": "อัปเดตล่าสุด",
