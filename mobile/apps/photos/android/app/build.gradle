@@ -64,6 +64,7 @@ android {
         multiDexEnabled true
         // consumerProguardFiles 'proguard-rules.pro' // Commented out for debug builds - uncomment for release optimization
 
+        manifestPlaceholders += [min_version_app_center: 257]
     }
 
     splits {
