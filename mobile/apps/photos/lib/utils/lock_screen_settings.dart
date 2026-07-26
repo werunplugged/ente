@@ -5,6 +5,7 @@ import "package:flutter/foundation.dart";
 import "package:flutter_secure_storage/flutter_secure_storage.dart";
 import "package:flutter_sodium/flutter_sodium.dart";
 import "package:logging/logging.dart";
+import "package:photos/core/constants.dart";
 import "package:privacy_screen/privacy_screen.dart";
 import "package:shared_preferences/shared_preferences.dart";
 
@@ -31,7 +32,9 @@ class LockScreenSettings {
     Duration(minutes: 30),
   ];
   Future<void> init(SharedPreferences prefs) async {
-    _secureStorage = const FlutterSecureStorage();
+    _secureStorage = const FlutterSecureStorage(
+      aOptions: kSecureStorageAndroidOptions,
+    );
     _preferences = prefs;
 
     await Future.delayed(const Duration(milliseconds: 500), () {
