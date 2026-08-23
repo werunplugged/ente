@@ -40,11 +40,18 @@ class UserDetailsStateWidgetState extends State<UserDetailsStateWidget> {
       _refreshFromCache();
     });
     // UNP-6647: refetch after a backup batch completes so the memory count
-    // stays current during and after high-volume uploads.
+    // stays current during and after high-volume uploads. The server
+    // recomputes usage/count asynchronously, so fetch again shortly after —
+    // the second response lands once the server has caught up.
     _syncStatusSubscription =
         Bus.instance.on<SyncStatusUpdate>().listen((event) {
       if (event.status == SyncStatus.completedBackup) {
         _fetchUserDetails();
+        Future.delayed(const Duration(seconds: 10), () {
+          if (mounted) {
+            _fetchUserDetails();
+          }
+        });
       }
     });
     super.initState();
