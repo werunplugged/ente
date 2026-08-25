@@ -1,4 +1,5 @@
 import "package:flutter/foundation.dart";
+import "package:flutter_secure_storage/flutter_secure_storage.dart";
 
 const int thumbnailSmallSize = 256;
 const int thumbnailQuality = 50;
@@ -109,3 +110,22 @@ const kFilterChipHeight = 32.0;
 const kMaxAppbarFilters = 14;
 
 const kLivePhotoHashSeparator = ':';
+
+// Ciphers used by flutter_secure_storage on Android, overriding package
+// defaults that are both vulnerable to padding oracle attacks:
+//
+//  - values: AES-GCM instead of AES-CBC/PKCS7, which has no integrity check.
+//  - AES key wrapping: RSA-OAEP instead of RSA/ECB/PKCS1, which is open to
+//    Bleichenbacher's attack.
+//
+// Both require API 23+, and minSdk is 26. Switching either one makes the plugin
+// re-encrypt existing values on next launch, so upgrading users keep their data.
+//
+// Every FlutterSecureStorage instance in the app must be constructed with these
+// options. Instances share a single preferences file, so any instance left on
+// the defaults would re-encrypt that file back to AES-CBC on each launch,
+// fighting the instances that use AES-GCM.
+const kSecureStorageAndroidOptions = AndroidOptions(
+  storageCipherAlgorithm: StorageCipherAlgorithm.AES_GCM_NoPadding,
+  keyCipherAlgorithm: KeyCipherAlgorithm.RSA_ECB_OAEPwithSHA_256andMGF1Padding,
+);
