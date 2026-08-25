@@ -6,6 +6,7 @@ import "package:ente_feature_flag/ente_feature_flag.dart";
 import "package:flutter/foundation.dart";
 import "package:logging/logging.dart";
 import "package:photos/core/constants.dart";
+import "package:photos/core/errors.dart";
 import "package:photos/db/upload_locks_db.dart";
 import "package:photos/module/upload/model/multipart.dart";
 import "package:photos/module/upload/model/xml.dart";
@@ -223,6 +224,16 @@ class MultiPartUploader {
       throw Exception(
         "File size mismatch. Expected ${partInfo.encFileSize} but got $encFileLength",
       );
+    }
+    // Ensure the number of URLs matches what we expect from the part size
+    final expectedCount = (encFileLength / partSize).ceil();
+    if (partsLength != expectedCount) {
+      _logger.severe(
+        'Multipart parts mismatch for key ${partInfo.urls.objectKey}. '
+        'Expected $expectedCount parts (encFileLength=$encFileLength, partSize=$partSize) '
+        'but got $partsLength',
+      );
+      throw MultiPartError('multipart url count mismatch');
     }
     // Start parts upload
     int count = 0;
