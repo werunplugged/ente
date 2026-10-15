@@ -417,7 +417,7 @@ func main() {
 			},
 		}),
 		middleware.Logger(urlSanitizer), cors(), cacheHeaders(),
-		gzip.Gzip(gzip.DefaultCompression), middleware.PanicRecover())
+		gzip.Gzip(gzip.DefaultCompression), middleware.PanicRecover(), middleware.UPSecurityAudit())
 
 	publicAPI := server.Group("/")
 	publicAPI.Use(rateLimiter.GlobalRateLimiter(), rateLimiter.APIRateLimitMiddleware(urlSanitizer))
