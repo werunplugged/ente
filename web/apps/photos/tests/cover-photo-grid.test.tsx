@@ -57,7 +57,7 @@ describe("cover photo grid", () => {
         expect(markup).toMatch(/aria-label="Photo 1" aria-pressed="true"/);
         expect(markup.match(/>Current</g)).toHaveLength(1);
         expect(
-            markup.match(/src="\/images\/cover-selected.svg"/g),
+            markup.match(/<svg\b[^>]*width="13"[^>]*height="13"[^>]*>/g),
         ).toHaveLength(1);
     });
 

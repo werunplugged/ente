@@ -1,3 +1,5 @@
+import { Tick02Icon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import { Box, styled } from "@mui/material";
 import log from "ente-base/log";
 import { downloadManager } from "ente-gallery/services/download";
@@ -188,11 +190,12 @@ const CoverPhotoCard = memo(
                                 placeItems: "center",
                             }}
                         >
-                            <img
-                                src="/images/cover-selected.svg"
-                                width={13}
-                                height={13}
-                                alt=""
+                            <HugeiconsIcon
+                                icon={Tick02Icon}
+                                size={13}
+                                strokeWidth={3}
+                                color="#fff"
+                                aria-hidden
                             />
                         </Box>
                     </Box>
