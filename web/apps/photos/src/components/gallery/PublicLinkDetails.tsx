@@ -1,5 +1,5 @@
 import { ManagePublicShareOptions } from "@/components/collections/CollectionShare";
-import { PickCoverPhotoDialog } from "@/components/collections/PickCoverPhotoDialog";
+import { CoverPickerDialog } from "@/components/collections/CoverPickerDialog";
 import { usePublicLinkURL } from "@/components/utils/use-public-link-url";
 import { Copy01Icon, Edit03Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -270,11 +270,11 @@ export const PublicLinkDetails = ({
                     )}
             </Stack>
             {canChangeCover && pickCoverPhotoVisibilityProps.open && (
-                <PickCoverPhotoDialog
+                <CoverPickerDialog
                     {...pickCoverPhotoVisibilityProps}
                     collection={collection}
                     files={files}
-                    user={user}
+                    currentCoverFile={coverFile}
                     canResetToDefault={
                         (collection.pubMagicMetadata?.data.coverID ?? 0) > 0
                     }

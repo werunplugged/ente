@@ -465,6 +465,8 @@
     "album_cover": "Album cover",
     "set_cover": "Set cover",
     "choose_cover": "Choose cover",
+    "pick_cover_from_album": "Pick any photo from {{album}}",
+    "current_cover": "Current",
     "set_as_cover": "Set as cover",
     "select_cover_photo": "Select cover photo",
     "reset_to_default": "Reset to default",
