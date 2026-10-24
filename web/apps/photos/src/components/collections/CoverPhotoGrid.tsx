@@ -27,7 +27,7 @@ const tileSize = 148;
 const gap = 10;
 const padding = 24;
 
-/** A virtualized, single-selection grid without the gallery's interactions. */
+// A virtualized, single-selection grid without the gallery's interactions.
 export const CoverPhotoGrid = ({
     width,
     height,
