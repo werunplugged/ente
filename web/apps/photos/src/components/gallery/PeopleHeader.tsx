@@ -1,4 +1,3 @@
-import { twoLineMobileTitleSx } from "@/components/gallery/header-layout";
 import { useWrapAsyncOperation } from "@/components/utils/use-wrap-async";
 import AddIcon from "@mui/icons-material/Add";
 import CheckIcon from "@mui/icons-material/Check";
@@ -146,7 +145,7 @@ const PersonHeaderSummary = ({
                 fileCount={person.fileIDs.length}
                 nameProps={{
                     ...summaryProps.nameProps,
-                    sx: twoLineMobileTitleSx,
+                    sx: { overflowWrap: "anywhere" },
                 }}
             />
         </Stack>

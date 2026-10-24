@@ -1,4 +1,3 @@
-import { isAlbumSummary } from "@/components/gallery/header-layout";
 // TODO: Audit this file
 import {
     CollectionShare,
@@ -8,7 +7,6 @@ import {
 import type { FileListHeaderOrFooter } from "@/components/FileList";
 import { PeopleHeader } from "@/components/gallery/PeopleHeader";
 import type { GalleryBarMode } from "@/components/gallery/reducer";
-import { useIsSmallWidth } from "ente-base/components/utils/hooks";
 import { useModalVisibility } from "ente-base/components/utils/modal";
 import type { Collection } from "ente-media/collection";
 import {
@@ -100,12 +98,6 @@ export const GalleryBarAndListHeader: React.FC<
         collectionShareVisibilityProps.onClose();
     }, [collectionShareVisibilityProps]);
 
-    const isSmallWidth = useIsSmallWidth();
-    const hasTwoLineTitle =
-        isSmallWidth &&
-        (!!activePerson ||
-            (!!collectionSummary && isAlbumSummary(collectionSummary)));
-
     const albumDescription =
         activeCollection?.pubMagicMetadata?.data.caption?.trim();
     const [descriptionHeight, setDescriptionHeight] = useState(0);
@@ -157,10 +149,7 @@ export const GalleryBarAndListHeader: React.FC<
             ) : (
                 <></>
             ),
-            height:
-                72 +
-                (hasTwoLineTitle ? 32 : 0) +
-                (albumDescription ? descriptionHeight : 0),
+            height: 72 + (albumDescription ? descriptionHeight : 0),
         });
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [
@@ -181,7 +170,6 @@ export const GalleryBarAndListHeader: React.FC<
         onCollectionSlideshow,
         onBackToAlbums,
         onEditAlbumDetails,
-        hasTwoLineTitle,
         albumDescription,
         descriptionHeight,
         // TODO: Cluster

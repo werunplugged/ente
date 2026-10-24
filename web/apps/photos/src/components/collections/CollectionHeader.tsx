@@ -1,8 +1,4 @@
 import type { RemotePullOpts } from "@/components/gallery";
-import {
-    isAlbumSummary,
-    twoLineMobileTitleSx,
-} from "@/components/gallery/header-layout";
 import { downloadAndSaveCollectionFiles } from "@/services/save";
 import {
     CleanIcon,
@@ -186,7 +182,9 @@ export const CollectionHeader: React.FC<CollectionHeaderProps> = (props) => {
                     )}
                     <GalleryItemsSummary
                         nameProps={
-                            isAlbum ? { sx: twoLineMobileTitleSx } : undefined
+                            isAlbum
+                                ? { sx: { overflowWrap: "anywhere" } }
+                                : undefined
                         }
                         name={name}
                         description={isAlbum ? undefined : description}
@@ -219,6 +217,9 @@ export const CollectionHeader: React.FC<CollectionHeaderProps> = (props) => {
         </GalleryItemsHeaderAdapter>
     );
 };
+
+const isAlbumSummary = ({ type }: CollectionSummary) =>
+    type == "album" || type == "folder" || type == "sharedIncoming";
 
 const shouldShowOptions = (type: CollectionSummaryType) =>
     type != "all" && type != "archiveItems";
