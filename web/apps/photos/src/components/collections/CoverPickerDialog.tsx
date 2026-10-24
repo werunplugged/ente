@@ -23,7 +23,7 @@ import type { EnteFile } from "ente-media/file";
 import { FileType } from "ente-media/file-type";
 import { SlideUpTransition } from "ente-new/photos/components/mui/SlideUpTransition";
 import { t } from "i18next";
-import React, { useCallback, useEffect, useId, useMemo, useState } from "react";
+import React, { useEffect, useId, useMemo, useState } from "react";
 import AutoSizer from "react-virtualized-auto-sizer";
 import { CoverPhotoGrid } from "./CoverPhotoGrid";
 
@@ -38,7 +38,7 @@ interface CoverPickerDialogProps {
     onResetToDefault: () => Promise<boolean>;
 }
 
-type SubmittingAction = "use-selected-photo" | "reset-to-default";
+type SubmittingAction = "set_as_cover" | "reset_to_default";
 
 export const CoverPickerDialog: React.FC<CoverPickerDialogProps> = ({
     open,
@@ -79,30 +79,25 @@ export const CoverPickerDialog: React.FC<CoverPickerDialogProps> = ({
         }
     }, [open, collection.id, currentCoverID]);
 
+    const actions: SubmittingAction[] = canResetToDefault
+        ? ["set_as_cover", "reset_to_default"]
+        : ["set_as_cover"];
     const selectedFile = photos.find(({ id }) => id === selectedFileID);
 
-    const handleUseSelectedPhoto = useCallback(async () => {
-        if (!selectedFile || isSubmitting) return;
+    const submit = async (action: SubmittingAction) => {
+        const update =
+            action === "set_as_cover"
+                ? selectedFile && (() => onUseSelectedPhoto(selectedFile))
+                : onResetToDefault;
+        if (!update || isSubmitting) return;
 
-        setSubmittingAction("use-selected-photo");
+        setSubmittingAction(action);
         try {
-            const didUpdate = await onUseSelectedPhoto(selectedFile);
-            if (didUpdate) onClose();
+            if (await update()) onClose();
         } finally {
             setSubmittingAction(undefined);
         }
-    }, [onUseSelectedPhoto, onClose, selectedFile, isSubmitting]);
-
-    const handleResetToDefault = useCallback(async () => {
-        if (isSubmitting) return;
-        setSubmittingAction("reset-to-default");
-        try {
-            const didReset = await onResetToDefault();
-            if (didReset) onClose();
-        } finally {
-            setSubmittingAction(undefined);
-        }
-    }, [onResetToDefault, onClose, isSubmitting]);
+    };
 
     return (
         <Dialog
@@ -141,23 +136,19 @@ export const CoverPickerDialog: React.FC<CoverPickerDialogProps> = ({
                 <Box sx={{ flex: 1, minHeight: 0, py: "18px" }}>
                     {photos.length ? (
                         <AutoSizer>
-                            {({ width, height }) =>
-                                width > 0 && height > 0 ? (
-                                    <CoverPhotoGrid
-                                        {...{
-                                            width,
-                                            height,
-                                            photos,
-                                            selectedFileID,
-                                            currentCoverID,
-                                        }}
-                                        disabled={isSubmitting}
-                                        onSelect={setSelectedFileID}
-                                    />
-                                ) : (
-                                    <></>
-                                )
-                            }
+                            {({ width, height }) => (
+                                <CoverPhotoGrid
+                                    {...{
+                                        width,
+                                        height,
+                                        photos,
+                                        selectedFileID,
+                                        currentCoverID,
+                                    }}
+                                    disabled={isSubmitting}
+                                    onSelect={setSelectedFileID}
+                                />
+                            )}
                         </AutoSizer>
                     ) : (
                         <Typography sx={{ color: "text.muted", px: "24px" }}>
@@ -166,45 +157,33 @@ export const CoverPickerDialog: React.FC<CoverPickerDialogProps> = ({
                     )}
                 </Box>
                 <Stack sx={footerSx}>
-                    <LoadingButton
-                        fullWidth
-                        color="accent"
-                        onClick={handleUseSelectedPhoto}
-                        loading={submittingAction === "use-selected-photo"}
-                        disabled={
-                            !selectedFile ||
-                            (isSubmitting &&
-                                submittingAction !== "use-selected-photo")
-                        }
-                        sx={[
-                            v2SubmitButtonSx,
-                            actionButtonSx,
-                            ...(submittingAction === "use-selected-photo"
-                                ? []
-                                : [primaryButtonDisabledSx]),
-                        ]}
-                    >
-                        {t("set_as_cover")}
-                    </LoadingButton>
-                    {canResetToDefault && (
-                        <LoadingButton
-                            fullWidth
-                            color="secondary"
-                            onClick={handleResetToDefault}
-                            loading={submittingAction === "reset-to-default"}
-                            disabled={
-                                isSubmitting &&
-                                submittingAction !== "reset-to-default"
-                            }
-                            sx={[
-                                v2CancelButtonSx,
-                                actionButtonSx,
-                                secondaryButtonSx,
-                            ]}
-                        >
-                            {t("reset_to_default")}
-                        </LoadingButton>
-                    )}
+                    {actions.map((action) => {
+                        const primary = action === "set_as_cover";
+                        return (
+                            <LoadingButton
+                                key={action}
+                                fullWidth
+                                color={primary ? "accent" : "secondary"}
+                                onClick={() => submit(action)}
+                                loading={submittingAction === action}
+                                disabled={
+                                    isSubmitting || (primary && !selectedFile)
+                                }
+                                sx={[
+                                    primary
+                                        ? v2SubmitButtonSx
+                                        : v2CancelButtonSx,
+                                    actionButtonSx,
+                                    primary
+                                        ? submittingAction !== action &&
+                                          primaryButtonDisabledSx
+                                        : secondaryButtonSx,
+                                ]}
+                            >
+                                {t(action)}
+                            </LoadingButton>
+                        );
+                    })}
                 </Stack>
             </Stack>
         </Dialog>

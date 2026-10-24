@@ -8,12 +8,8 @@ import {
 } from "ente-new/photos/components/PlaceholderThumbnails";
 import { BaseTileButton } from "ente-new/photos/components/Tiles";
 import { t } from "i18next";
-import { memo, useEffect, useId, useMemo, useState } from "react";
-import {
-    areEqual,
-    FixedSizeList,
-    type ListChildComponentProps,
-} from "react-window";
+import { memo, useEffect, useId, useState } from "react";
+import { FixedSizeList, type ListChildComponentProps } from "react-window";
 
 interface CoverPhotoGridProps {
     width: number;
@@ -33,11 +29,7 @@ const padding = 24;
 export const CoverPhotoGrid = ({
     width,
     height,
-    photos,
-    selectedFileID,
-    currentCoverID,
-    disabled,
-    onSelect,
+    ...selection
 }: CoverPhotoGridProps) => {
     const availableWidth = Math.max(1, width - 2 * padding);
     const columns = Math.min(
@@ -45,34 +37,14 @@ export const CoverPhotoGrid = ({
         Math.max(1, Math.floor((availableWidth + gap) / (tileSize + gap))),
     );
     const size = Math.min(tileSize, availableWidth);
-    const itemData = useMemo(
-        () => ({
-            photos,
-            selectedFileID,
-            currentCoverID,
-            disabled,
-            onSelect,
-            columns,
-            size,
-        }),
-        [
-            photos,
-            selectedFileID,
-            currentCoverID,
-            disabled,
-            onSelect,
-            columns,
-            size,
-        ],
-    );
 
     return (
         <FixedSizeList
             width={width}
             height={height}
-            itemCount={Math.ceil(photos.length / columns)}
+            itemCount={Math.ceil(selection.photos.length / columns)}
             itemSize={size + gap}
-            itemData={itemData}
+            itemData={{ ...selection, columns, size }}
             overscanCount={2}
             useIsScrolling
         >
@@ -86,46 +58,48 @@ type RowData = Omit<CoverPhotoGridProps, "width" | "height"> & {
     size: number;
 };
 
-const CoverPhotoRow = memo(
-    ({ index, style, isScrolling, data }: ListChildComponentProps<RowData>) => {
-        const {
-            photos,
-            columns,
-            size,
-            selectedFileID,
-            currentCoverID,
-            disabled,
-            onSelect,
-        } = data;
-        return (
-            <Box
-                style={style}
-                sx={{
-                    display: "flex",
-                    gap: `${gap}px`,
-                    px: `${padding}px`,
-                    boxSizing: "border-box",
-                }}
-            >
-                {photos
-                    .slice(index * columns, (index + 1) * columns)
-                    .map((file) => (
-                        <CoverPhotoCard
-                            key={file.id}
-                            file={file}
-                            size={size}
-                            isScrolling={Boolean(isScrolling)}
-                            selected={file.id === selectedFileID}
-                            current={file.id === currentCoverID}
-                            disabled={disabled}
-                            onSelect={onSelect}
-                        />
-                    ))}
-            </Box>
-        );
-    },
-    areEqual,
-);
+const CoverPhotoRow = ({
+    index,
+    style,
+    isScrolling,
+    data,
+}: ListChildComponentProps<RowData>) => {
+    const {
+        photos,
+        columns,
+        size,
+        selectedFileID,
+        currentCoverID,
+        disabled,
+        onSelect,
+    } = data;
+    return (
+        <Box
+            style={style}
+            sx={{
+                display: "flex",
+                gap: `${gap}px`,
+                px: `${padding}px`,
+                boxSizing: "border-box",
+            }}
+        >
+            {photos
+                .slice(index * columns, (index + 1) * columns)
+                .map((file) => (
+                    <CoverPhotoCard
+                        key={file.id}
+                        file={file}
+                        size={size}
+                        isScrolling={Boolean(isScrolling)}
+                        selected={file.id === selectedFileID}
+                        current={file.id === currentCoverID}
+                        disabled={disabled}
+                        onSelect={onSelect}
+                    />
+                ))}
+        </Box>
+    );
+};
 
 interface CoverPhotoCardProps {
     file: EnteFile;
@@ -137,120 +111,117 @@ interface CoverPhotoCardProps {
     onSelect: (fileID: number) => void;
 }
 
-const CoverPhotoCard = ({
-    file,
-    size,
-    isScrolling,
-    selected,
-    current,
-    disabled,
-    onSelect,
-}: CoverPhotoCardProps) => {
-    const currentLabelID = useId();
-    const [thumbnail, setThumbnail] = useState<{
-        fileID: number;
-        url: string;
-    }>();
-    const [failedFileID, setFailedFileID] = useState<number>();
-    const imageURL = thumbnail?.fileID === file.id ? thumbnail.url : undefined;
+const CoverPhotoCard = memo(
+    ({
+        file,
+        size,
+        isScrolling,
+        selected,
+        current,
+        disabled,
+        onSelect,
+    }: CoverPhotoCardProps) => {
+        const currentLabelID = useId();
+        // The row keys each card by file ID, so its thumbnail state cannot cross files.
+        const [imageURL, setImageURL] = useState<string | null>();
 
-    useEffect(() => {
-        if (file.metadata.hasStaticThumbnail) return;
-        let cancelled = false;
-        void downloadManager
-            .renderableThumbnailURL(file, isScrolling)
-            .then((url) => {
-                if (!cancelled && url) {
-                    setFailedFileID(undefined);
-                    setThumbnail({ fileID: file.id, url });
-                }
-            })
-            .catch((error: unknown) => {
-                if (!cancelled) {
-                    setFailedFileID(file.id);
-                    log.warn("Failed to fetch cover thumbnail", error);
-                }
-            });
-        return () => {
-            cancelled = true;
-        };
-    }, [file, isScrolling]);
+        useEffect(() => {
+            if (file.metadata.hasStaticThumbnail) return;
+            let cancelled = false;
+            void downloadManager
+                .renderableThumbnailURL(file, isScrolling)
+                .then((url) => {
+                    if (!cancelled && url) {
+                        setImageURL(url);
+                    }
+                })
+                .catch((error: unknown) => {
+                    if (!cancelled) {
+                        setImageURL(null);
+                        log.warn("Failed to fetch cover thumbnail", error);
+                    }
+                });
+            return () => {
+                cancelled = true;
+            };
+        }, [file, isScrolling]);
 
-    return (
-        <PhotoButton
-            type="button"
-            aria-label={file.metadata.title}
-            aria-pressed={selected}
-            aria-describedby={current ? currentLabelID : undefined}
-            disabled={disabled}
-            onClick={() => onSelect(file.id)}
-            sx={{ width: size, height: size }}
-        >
-            {file.metadata.hasStaticThumbnail || failedFileID === file.id ? (
-                <StaticThumbnail fileType={file.metadata.fileType} />
-            ) : imageURL ? (
-                <img src={imageURL} alt="" />
-            ) : (
-                <LoadingThumbnail />
-            )}
-            {selected && (
-                <Box
-                    sx={{
-                        position: "absolute",
-                        inset: 0,
-                        border: "3px solid #08c225",
-                        borderRadius: "inherit",
-                        pointerEvents: "none",
-                    }}
-                >
+        return (
+            <PhotoButton
+                type="button"
+                aria-label={file.metadata.title}
+                aria-pressed={selected}
+                aria-describedby={current ? currentLabelID : undefined}
+                disabled={disabled}
+                onClick={() => onSelect(file.id)}
+                sx={{ width: size, height: size }}
+            >
+                {file.metadata.hasStaticThumbnail || imageURL === null ? (
+                    <StaticThumbnail fileType={file.metadata.fileType} />
+                ) : imageURL ? (
+                    <img src={imageURL} alt="" />
+                ) : (
+                    <LoadingThumbnail />
+                )}
+                {selected && (
                     <Box
                         sx={{
                             position: "absolute",
-                            top: 7,
-                            right: 7,
-                            width: 26,
-                            height: 26,
-                            boxSizing: "border-box",
-                            borderRadius: "50%",
-                            bgcolor: "#08c225",
-                            border: "2px solid #fff",
-                            display: "grid",
-                            placeItems: "center",
+                            inset: 0,
+                            border: "3px solid #08c225",
+                            borderRadius: "inherit",
+                            pointerEvents: "none",
                         }}
                     >
-                        <img
-                            src="/images/cover-selected.svg"
-                            width={13}
-                            height={13}
-                            alt=""
-                        />
+                        <Box
+                            sx={{
+                                position: "absolute",
+                                top: 7,
+                                right: 7,
+                                width: 26,
+                                height: 26,
+                                boxSizing: "border-box",
+                                borderRadius: "50%",
+                                bgcolor: "#08c225",
+                                border: "2px solid #fff",
+                                display: "grid",
+                                placeItems: "center",
+                            }}
+                        >
+                            <img
+                                src="/images/cover-selected.svg"
+                                width={13}
+                                height={13}
+                                alt=""
+                            />
+                        </Box>
                     </Box>
-                </Box>
-            )}
-            {current && (
-                <Box
-                    id={currentLabelID}
-                    sx={{
-                        position: "absolute",
-                        bottom: 10,
-                        left: 10,
-                        px: "11px",
-                        py: "4px",
-                        borderRadius: "10px",
-                        bgcolor: "rgba(0 0 0 / 0.55)",
-                        color: "#fff",
-                        fontSize: 10,
-                        fontWeight: 500,
-                        lineHeight: "12px",
-                        pointerEvents: "none",
-                    }}
-                >
-                    {t("current_cover")}
-                </Box>
-            )}
-        </PhotoButton>
-    );
-};
+                )}
+                {current && (
+                    <Box
+                        id={currentLabelID}
+                        sx={{
+                            position: "absolute",
+                            bottom: 10,
+                            left: 10,
+                            px: "11px",
+                            py: "4px",
+                            borderRadius: "10px",
+                            bgcolor: "rgba(0 0 0 / 0.55)",
+                            color: "#fff",
+                            fontSize: 10,
+                            fontWeight: 500,
+                            lineHeight: "12px",
+                            pointerEvents: "none",
+                        }}
+                    >
+                        {t("current_cover")}
+                    </Box>
+                )}
+            </PhotoButton>
+        );
+    },
+);
 
 const PhotoButton = styled(BaseTileButton)({
     flexShrink: 0,
