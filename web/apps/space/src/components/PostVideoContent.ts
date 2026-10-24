@@ -111,7 +111,23 @@ export const createSpaceVideoContent = (
     }
     supportMessage.style.marginTop = "2px";
     errorMessage.append(errorTitle, supportMessage);
-    element.append(video, button, loading, errorMessage);
+    element.append(video);
+    let cover: HTMLImageElement | undefined;
+    if (!inline && item.imageUrl) {
+        cover = document.createElement("img");
+        cover.src = item.imageUrl;
+        cover.alt = "";
+        Object.assign(cover.style, {
+            position: "absolute",
+            inset: "0",
+            width: "100%",
+            height: "100%",
+            objectFit: "contain",
+            pointerEvents: "none",
+        });
+        element.append(cover);
+    }
+    element.append(button, loading, errorMessage);
     const cacheReadController = new AbortController();
     let generation = 0;
     let sourceGeneration = 0;
@@ -182,6 +198,7 @@ export const createSpaceVideoContent = (
         sourceGeneration++;
         pendingLoad = undefined;
         pause();
+        if (cover) cover.hidden = false;
         if (item.imageUrl) video.poster = item.imageUrl;
         video.removeAttribute("src");
         video.load();
@@ -339,7 +356,10 @@ export const createSpaceVideoContent = (
     video.onloadedmetadata = () => {
         if (media.start) video.currentTime = media.start;
     };
-    video.onloadeddata = () => video.removeAttribute("poster");
+    video.onloadeddata = () => {
+        if (cover) cover.hidden = true;
+        video.removeAttribute("poster");
+    };
     video.ontimeupdate = () => {
         if (media.end != undefined && video.currentTime >= media.end) {
             if (inline) video.currentTime = media.start ?? 0;

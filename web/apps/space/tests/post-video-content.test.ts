@@ -23,6 +23,9 @@ class Element extends EventTarget {
     disabled = false;
     hidden = false;
     textContent = "";
+    constructor(readonly tagName = "") {
+        super();
+    }
     setAttribute(name: string, value: string) {
         this.attributes.set(name, value);
     }
@@ -46,6 +49,7 @@ class Video extends Element {
     onplaying?: () => void;
     onloadeddata?: () => void;
     onended?: () => void;
+    ontimeupdate?: () => void;
     get poster() {
         return this.getAttribute("poster") ?? "";
     }
@@ -85,7 +89,7 @@ beforeEach(() => {
         Object.assign(new EventTarget(), {
             hidden: false,
             createElement: (tag: string) =>
-                tag == "video" ? new Video() : new Element(),
+                tag == "video" ? new Video() : new Element(tag),
         }),
     );
 });
@@ -101,6 +105,7 @@ const create = (
     inline = true,
     imageUrl: string | undefined = "blob:poster",
     options: Parameters<typeof createSpaceVideoContent>[2] = {},
+    end?: number,
 ) => {
     const content = createSpaceVideoContent(
         {
@@ -112,21 +117,24 @@ const create = (
                     mediaType: "video/mp4",
                 } as SpacePostAsset,
                 durationMs: 1000,
+                end,
             },
         },
         load,
         { ...options, inline },
     );
     contents.push(content);
-    const [video, button, loading, error] = (
-        content.element as unknown as Element
-    ).children;
+    const children = (content.element as unknown as Element).children;
+    const [video] = children;
+    const [button, loading, error] = children.slice(-3);
+    const cover = children.find((child) => child.tagName == "img");
     return {
         ...content,
         video: video as Video,
         button: button!,
         loading: loading!,
         error: error!,
+        cover,
         errorTitle: error!.children[0]!,
         supportMessage: error!.children[1]!,
     };
@@ -164,13 +172,16 @@ test("a preloaded viewer video shows its decoded frame before activation", async
     );
     expect(content.video.getAttribute("src")).toBe("blob:cached-video");
     expect(content.video.poster).toBe("blob:poster");
+    expect(content.cover?.hidden).toBe(false);
     content.video.onloadeddata?.();
     expect(content.video.getAttribute("poster")).toBeNull();
+    expect(content.cover?.hidden).toBe(true);
     expect(content.video.play).not.toHaveBeenCalled();
     content.play();
     await vi.advanceTimersByTimeAsync(0);
     content.deactivate();
     expect(content.video.getAttribute("poster")).toBeNull();
+    expect(content.cover?.hidden).toBe(true);
     content.play();
     await vi.advanceTimersByTimeAsync(0);
     expect(content.video.getAttribute("poster")).toBeNull();
@@ -241,20 +252,33 @@ test("closing the viewer cancels its subscription to an existing video preload",
     expect(load).not.toHaveBeenCalled();
 });
 
-test("ending a viewer video restores its cover for replay", async () => {
-    const content = create(false);
-    content.play();
-    await vi.advanceTimersByTimeAsync(0);
-    content.video.onloadeddata?.();
-    content.video.onended?.();
-    expect(content.video.poster).toBe("blob:poster");
-    expect(content.video.getAttribute("src")).toBeNull();
-    content.play(true);
-    await vi.advanceTimersByTimeAsync(0);
-    content.video.onloadeddata?.();
-    expect(content.video.getAttribute("poster")).toBeNull();
-    expect(content.video.paused).toBe(false);
-});
+test.each([undefined, 0.5])(
+    "ending a viewer video restores a visible cover for replay (trim end: %s)",
+    async (end) => {
+        const content = create(false, "blob:poster", {}, end);
+        content.play();
+        await vi.advanceTimersByTimeAsync(0);
+        content.video.onloadeddata?.();
+        expect(content.cover?.hidden).toBe(true);
+        if (end == undefined) content.video.onended?.();
+        else {
+            content.video.currentTime = end;
+            content.video.ontimeupdate?.();
+        }
+        expect(content.cover?.hidden).toBe(false);
+        expect(content.video.poster).toBe("blob:poster");
+        expect(content.video.getAttribute("src")).toBeNull();
+        expect(content.button.getAttribute("aria-hidden")).toBe("false");
+        content.play(true);
+        expect(content.cover?.hidden).toBe(false);
+        await vi.advanceTimersByTimeAsync(0);
+        content.video.onloadeddata?.();
+        expect(content.cover?.hidden).toBe(true);
+        expect(content.video.getAttribute("poster")).toBeNull();
+        expect(content.video.paused).toBe(false);
+        expect(load).toHaveBeenCalledTimes(1);
+    },
+);
 
 test("autoplay joins an in-flight preload without downloading the video again", async () => {
     const download = Promise.withResolvers<string>();
