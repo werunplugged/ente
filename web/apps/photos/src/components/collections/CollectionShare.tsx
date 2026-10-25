@@ -26,7 +26,6 @@ import NumberAvatar from "@mui/material/Avatar";
 import TextField from "@mui/material/TextField";
 import type { LocalUser } from "ente-accounts/services/user";
 import { EnteSwitch } from "ente-base/components/EnteSwitch";
-import { FocusVisibleButton } from "ente-base/components/mui/FocusVisibleButton";
 import { LoadingButton } from "ente-base/components/mui/LoadingButton";
 import {
     SidebarDrawer,
@@ -70,9 +69,8 @@ import { CollectionSubType, type CollectionUser } from "ente-media/collection";
 import { useSettingsSnapshot } from "ente-new/photos/components/utils/use-snapshot";
 import {
     createPublicURL,
-    deleteCollection,
-    deleteShareURL,
     getCollectionByID,
+    removePublicLink,
     shareCollection,
     unshareCollection,
     updateCollectionLayout,
@@ -1769,21 +1767,18 @@ export const ManagePublicShareOptions: React.FC<
         setBlockingLoad(true);
         setErrorMessage("");
         try {
-            const isQuickLinkAlbum =
-                collection.magicMetadata?.data.subType ==
-                CollectionSubType.quicklink;
-            if (isQuickLinkAlbum && collection.sharees.length === 0) {
-                await deleteCollection(collection.id, { keepFiles: true });
-                setPublicURL(undefined);
-                void onRemotePull({ silent: true });
-                handleRootClose();
-                return;
-            }
-
-            await deleteShareURL(collection.id);
+            await removePublicLink(collection);
             setPublicURL(undefined);
             void onRemotePull({ silent: true });
-            onClose();
+            if (
+                collection.magicMetadata?.data.subType ==
+                    CollectionSubType.quicklink &&
+                collection.sharees.length === 0
+            ) {
+                handleRootClose();
+            } else {
+                onClose();
+            }
         } catch (e) {
             log.error("Failed to remove public link", e);
             setErrorMessage(t("generic_error"));
@@ -1960,23 +1955,6 @@ export const ManagePublicShareOptions: React.FC<
                             </SidebarDrawerDepthContext.Provider>
                         </SidebarPanelContext.Provider>
                     </Box>
-                    <FocusVisibleButton
-                        color="critical"
-                        onClick={handleRemovePublicLink}
-                        sx={{
-                            alignSelf: "flex-start",
-                            ml: 1,
-                            px: 1,
-                            py: 1,
-                            bgcolor: "transparent",
-                            color: "critical.main",
-                            fontSize: 14,
-                            fontWeight: 600,
-                            "&:hover": { bgcolor: "fill.faintHover" },
-                        }}
-                    >
-                        {t("remove_link")}
-                    </FocusVisibleButton>
                     {errorMessage && (
                         <Typography
                             variant="small"

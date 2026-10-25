@@ -17,12 +17,16 @@ import { FocusVisibleButton } from "ente-base/components/mui/FocusVisibleButton"
 import { useClipboardCopy } from "ente-base/components/utils/hooks";
 import { useModalVisibility } from "ente-base/components/utils/modal";
 import { useBaseContext } from "ente-base/context";
+import log from "ente-base/log";
 import type { Collection, PublicURL } from "ente-media/collection";
 import type { EnteFile } from "ente-media/file";
 import { FileType } from "ente-media/file-type";
 import { ItemCard } from "ente-new/photos/components/Tiles";
 import { useSettingsSnapshot } from "ente-new/photos/components/utils/use-snapshot";
-import { updateCollectionDetails } from "ente-new/photos/services/collection";
+import {
+    removePublicLink,
+    updateCollectionDetails,
+} from "ente-new/photos/services/collection";
 import { openURL } from "ente-new/photos/utils/web";
 import { t } from "i18next";
 import { useState } from "react";
@@ -51,6 +55,7 @@ export const PublicLinkDetails = ({
     const { show: showPickCoverPhoto, props: pickCoverPhotoVisibilityProps } =
         useModalVisibility();
     const { customDomain } = useSettingsSnapshot();
+    const [removeLinkError, setRemoveLinkError] = useState("");
     const [shareState, setShareState] = useState({
         collection,
         publicURL: collection.publicURLs[0],
@@ -86,9 +91,27 @@ export const PublicLinkDetails = ({
         }
     };
 
+    const handleRemovePublicLink = async () => {
+        setBlockingLoad(true);
+        setRemoveLinkError("");
+        try {
+            await removePublicLink(collection);
+            setPublicURL(undefined);
+            void onRemotePull({ silent: true });
+        } catch (e) {
+            log.error("Failed to remove public link", e);
+            setRemoveLinkError(t("generic_error"));
+        } finally {
+            setBlockingLoad(false);
+        }
+    };
+
     return (
         <Box
             sx={{
+                display: "flex",
+                flexDirection: "column",
+                containerType: "inline-size",
                 flex: 1,
                 minHeight: 0,
                 overflow: "auto",
@@ -126,8 +149,18 @@ export const PublicLinkDetails = ({
                 </Typography>
             </Stack>
             <Stack
-                direction="row"
-                sx={{ flexWrap: "wrap", gap: "40px", alignItems: "flex-start" }}
+                sx={{
+                    display: "grid",
+                    gridTemplateColumns: "minmax(0, 1fr)",
+                    flex: 1,
+                    gap: "28px",
+                    alignContent: "start",
+                    alignItems: "start",
+                    "@container (min-width: 720px)": {
+                        gridTemplateColumns: "minmax(0, 364px) minmax(0, 1fr)",
+                        columnGap: "44px",
+                    },
+                }}
             >
                 <Stack sx={{ width: "100%", maxWidth: 364, gap: "14px" }}>
                     <Box sx={{ position: "relative" }}>
@@ -244,17 +277,39 @@ export const PublicLinkDetails = ({
                     >
                         {t("open_album")}
                     </FocusVisibleButton>
+                    {collection.owner.id === user.id && publicURL && (
+                        <FocusVisibleButton
+                            color="critical"
+                            fullWidth
+                            onClick={handleRemovePublicLink}
+                            sx={{
+                                height: 52,
+                                bgcolor: "transparent",
+                                color: "critical.main",
+                                fontSize: 14,
+                                fontWeight: 500,
+                                textDecoration: "underline",
+                                borderRadius: "20px",
+                                "&:hover": { bgcolor: "fill.faintHover" },
+                            }}
+                        >
+                            {t("remove_link")}
+                        </FocusVisibleButton>
+                    )}
+                    {removeLinkError && (
+                        <Typography
+                            role="alert"
+                            variant="small"
+                            sx={{ color: "critical.main" }}
+                        >
+                            {removeLinkError}
+                        </Typography>
+                    )}
                 </Stack>
                 {collection.owner.id === user.id &&
                     publicURL &&
                     resolvedURL && (
-                        <Box
-                            sx={{
-                                flex: "1 1 320px",
-                                minWidth: 0,
-                                maxWidth: 520,
-                            }}
-                        >
+                        <Box sx={{ minWidth: 0 }}>
                             <ManagePublicShareOptions
                                 variant="inline"
                                 {...{
