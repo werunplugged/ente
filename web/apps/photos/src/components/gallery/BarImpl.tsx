@@ -487,9 +487,8 @@ export const GalleryBarImpl: React.FC<GalleryBarImplProps> = ({
                 "--gallery-navigation-surface": "#FFFFFF",
                 "--gallery-navigation-hover":
                     "color-mix(in srgb, var(--mui-palette-text-base) 8%, var(--gallery-navigation-surface))",
-                display: collapsed && !mobile ? "none" : "flex",
                 flexShrink: 0,
-                width: mobile ? "100%" : 328,
+                width: "100%",
                 height: "100%",
                 minHeight: 0,
                 px: mobile ? "12px" : "16px",

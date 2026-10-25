@@ -41,7 +41,9 @@ import {
     type GalleryBarImplProps,
     type GalleryBarPresentationProps,
 } from "./BarImpl";
+import { NavigationSlide } from "./NavigationSlide";
 import type { GalleryBarMode } from "./reducer";
+import { useNavigationContentMotion } from "./use-navigation-content-motion";
 
 type GalleryNavigation = Omit<
     GalleryBarImplProps,
@@ -75,10 +77,20 @@ export const PhotosNavigationShell: React.FC<
     ...props
 }) => {
     const isOffline = useIsOffline();
+    const reduceMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
     const [railOpen, setRailOpen] = useState(true);
     const [navigationCollapsed, setNavigationCollapsed] = useState(false);
     const toggleRail = () => setRailOpen((open) => !open);
     const mobile = useMediaQuery(useTheme().breakpoints.down("md"));
+    const panelOpen =
+        railOpen &&
+        !!galleryNavigation &&
+        !props.isInSearchMode &&
+        !navigationCollapsed;
+    const contentRef = useNavigationContentMotion(
+        `${mobile}-${panelOpen}-${railOpen}`,
+        reduceMotion,
+    );
     const { show: showMobileNavigation, props: mobileDrawerProps } =
         useModalVisibility();
     const { onClose: closeMobileNavigation } = mobileDrawerProps;
@@ -144,6 +156,17 @@ export const PhotosNavigationShell: React.FC<
         setNavigationCollapsed(false);
         if (mobile) showMobileNavigation();
     };
+    const galleryBar = galleryNavigation && (
+        <GalleryBarImpl
+            {...galleryNavigation}
+            mode={props.mode}
+            collapsed={!panelOpen}
+            mobileDrawerProps={mobileDrawerProps}
+            onCreateAlbum={openAlbumCreation}
+            onSelectCollectionID={selectCollection}
+            onSelectPerson={selectPerson}
+        />
+    );
     return (
         <Stack
             sx={(theme) => ({
@@ -152,8 +175,9 @@ export const PhotosNavigationShell: React.FC<
                 minHeight: 0,
                 bgcolor: "#F4F4F4",
                 ...theme.applyStyles("light", {
-                    "& > :first-child .MuiButton-colorSecondary, & > :last-child > nav .MuiButton-colorSecondary":
-                        { "--mui-palette-secondary-main": "#FFFFFF" },
+                    "& > :first-child .MuiButton-colorSecondary": {
+                        "--mui-palette-secondary-main": "#FFFFFF",
+                    },
                 }),
                 ...theme.applyStyles("dark", { bgcolor: "#161616" }),
             })}
@@ -179,44 +203,58 @@ export const PhotosNavigationShell: React.FC<
                     flex: 1,
                     minWidth: 0,
                     minHeight: 0,
+                    overflow: "clip",
                     p: {
                         xs: railOpen ? "0 8px 8px 0" : "0 8px 8px",
                         sm: railOpen ? "0 11px 11px 0" : "0 11px 11px",
                     },
                 }}
             >
-                <Box
-                    component="nav"
-                    sx={{
-                        display: railOpen ? "flex" : "none",
-                        flexDirection: "column",
-                        alignItems: "center",
-                        flexShrink: 0,
-                        width: { xs: "56px", sm: "72px" },
-                        px: { xs: "9px", sm: "14px" },
-                        gap: "12px",
-                    }}
+                <NavigationSlide
+                    open={railOpen}
+                    width={{ xs: 56, sm: 72 }}
+                    reduceMotion={reduceMotion}
+                    rail
                 >
-                    {alternateHeader == null && (
-                        <NormalNavigationRail
-                            {...props}
-                            isHome={
-                                props.mode == "albums" &&
-                                !props.isInSearchMode &&
-                                galleryNavigation?.activeCollectionID ==
-                                    PseudoCollectionID.all
-                            }
-                            onChangeMode={handleChangeMode}
-                            opensDialog={mobile}
-                            navigationOpen={
-                                !!galleryNavigation &&
-                                (mobile
-                                    ? mobileDrawerProps.open
-                                    : !navigationCollapsed)
-                            }
-                        />
-                    )}
-                </Box>
+                    <Box
+                        component="nav"
+                        sx={(theme) => ({
+                            display: "flex",
+                            height: "100%",
+                            flexDirection: "column",
+                            alignItems: "center",
+                            flexShrink: 0,
+                            width: "100%",
+                            px: { xs: "9px", sm: "14px" },
+                            gap: "12px",
+                            ...theme.applyStyles("light", {
+                                "& .MuiButton-colorSecondary": {
+                                    "--mui-palette-secondary-main": "#FFFFFF",
+                                },
+                            }),
+                        })}
+                    >
+                        {alternateHeader == null && (
+                            <NormalNavigationRail
+                                {...props}
+                                isHome={
+                                    props.mode == "albums" &&
+                                    !props.isInSearchMode &&
+                                    galleryNavigation?.activeCollectionID ==
+                                        PseudoCollectionID.all
+                                }
+                                onChangeMode={handleChangeMode}
+                                opensDialog={mobile}
+                                navigationOpen={
+                                    !!galleryNavigation &&
+                                    (mobile
+                                        ? mobileDrawerProps.open
+                                        : !navigationCollapsed)
+                                }
+                            />
+                        )}
+                    </Box>
+                </NavigationSlide>
                 <Stack
                     sx={{
                         flex: 1,
@@ -227,15 +265,17 @@ export const PhotosNavigationShell: React.FC<
                 >
                     {galleryNavigation && !props.isInSearchMode && (
                         <>
-                            <GalleryBarImpl
-                                {...galleryNavigation}
-                                mode={props.mode}
-                                collapsed={!railOpen || navigationCollapsed}
-                                mobileDrawerProps={mobileDrawerProps}
-                                onCreateAlbum={openAlbumCreation}
-                                onSelectCollectionID={selectCollection}
-                                onSelectPerson={selectPerson}
-                            />
+                            {mobile ? (
+                                galleryBar
+                            ) : (
+                                <NavigationSlide
+                                    open={panelOpen}
+                                    width={328}
+                                    reduceMotion={reduceMotion}
+                                >
+                                    {galleryBar}
+                                </NavigationSlide>
+                            )}
                             <CreateAlbumDialog
                                 {...albumNameInputVisibilityProps}
                                 isHidden={createInHiddenSection}
@@ -245,6 +285,7 @@ export const PhotosNavigationShell: React.FC<
                         </>
                     )}
                     <Stack
+                        ref={contentRef}
                         sx={{ flex: 1, minWidth: 0, minHeight: 0, gap: "8px" }}
                     >
                         <Stack
