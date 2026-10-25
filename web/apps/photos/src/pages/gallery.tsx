@@ -2326,14 +2326,6 @@ const Page: React.FC = () => {
                                 albums={sidebarCollectionSummaries}
                                 title={t("links")}
                                 filter="links"
-                                linksByID={
-                                    new Map(
-                                        quickLinks.map((link) => [
-                                            link.id,
-                                            link,
-                                        ]),
-                                    )
-                                }
                                 searchQuery={albumSearchQuery}
                                 sortBy={collectionsSortBy}
                                 onSelectAlbum={selectGalleryCollection}
