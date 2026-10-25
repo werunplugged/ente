@@ -26,7 +26,6 @@ import NumberAvatar from "@mui/material/Avatar";
 import TextField from "@mui/material/TextField";
 import type { LocalUser } from "ente-accounts/services/user";
 import { EnteSwitch } from "ente-base/components/EnteSwitch";
-import { FocusVisibleButton } from "ente-base/components/mui/FocusVisibleButton";
 import { LoadingButton } from "ente-base/components/mui/LoadingButton";
 import {
     SidebarDrawer,
@@ -70,9 +69,8 @@ import { CollectionSubType, type CollectionUser } from "ente-media/collection";
 import { useSettingsSnapshot } from "ente-new/photos/components/utils/use-snapshot";
 import {
     createPublicURL,
-    deleteCollection,
-    deleteShareURL,
     getCollectionByID,
+    removePublicLink,
     shareCollection,
     unshareCollection,
     updateCollectionLayout,
@@ -91,7 +89,6 @@ import React, {
     useRef,
     useState,
 } from "react";
-import { createPortal } from "react-dom";
 import { Trans } from "react-i18next";
 import { z } from "zod";
 
@@ -1705,7 +1702,7 @@ type ManagePublicShareOptionsProps = {
               variant?: "drawer";
               onRootClose: () => void;
           } & ModalVisibilityProps)
-        | { variant: "inline"; removeLinkContainer?: HTMLElement | null }
+        | { variant: "inline" }
     );
 
 export const ManagePublicShareOptions: React.FC<
@@ -1770,21 +1767,18 @@ export const ManagePublicShareOptions: React.FC<
         setBlockingLoad(true);
         setErrorMessage("");
         try {
-            const isQuickLinkAlbum =
-                collection.magicMetadata?.data.subType ==
-                CollectionSubType.quicklink;
-            if (isQuickLinkAlbum && collection.sharees.length === 0) {
-                await deleteCollection(collection.id, { keepFiles: true });
-                setPublicURL(undefined);
-                void onRemotePull({ silent: true });
-                handleRootClose();
-                return;
-            }
-
-            await deleteShareURL(collection.id);
+            await removePublicLink(collection);
             setPublicURL(undefined);
             void onRemotePull({ silent: true });
-            onClose();
+            if (
+                collection.magicMetadata?.data.subType ==
+                    CollectionSubType.quicklink &&
+                collection.sharees.length === 0
+            ) {
+                handleRootClose();
+            } else {
+                onClose();
+            }
         } catch (e) {
             log.error("Failed to remove public link", e);
             setErrorMessage(t("generic_error"));
@@ -1872,31 +1866,6 @@ export const ManagePublicShareOptions: React.FC<
     );
 
     if (props.variant == "inline") {
-        const removeLinkButton = (
-            <FocusVisibleButton
-                color="critical"
-                onClick={handleRemovePublicLink}
-                sx={{
-                    alignSelf: props.removeLinkContainer
-                        ? "stretch"
-                        : "flex-start",
-                    ml: props.removeLinkContainer ? 0 : 1,
-                    px: 1,
-                    py: 1,
-                    bgcolor: "transparent",
-                    color: "critical.main",
-                    fontSize: 14,
-                    fontWeight: 500,
-                    width: props.removeLinkContainer ? "100%" : undefined,
-                    height: props.removeLinkContainer ? 52 : undefined,
-                    textDecoration: "underline",
-                    borderRadius: "20px",
-                    "&:hover": { bgcolor: "fill.faintHover" },
-                }}
-            >
-                {t("remove_link")}
-            </FocusVisibleButton>
-        );
         return (
             <ThemeProvider theme={sidebarTheme}>
                 <Stack
@@ -1986,12 +1955,6 @@ export const ManagePublicShareOptions: React.FC<
                             </SidebarDrawerDepthContext.Provider>
                         </SidebarPanelContext.Provider>
                     </Box>
-                    {props.removeLinkContainer
-                        ? createPortal(
-                              removeLinkButton,
-                              props.removeLinkContainer,
-                          )
-                        : removeLinkButton}
                     {errorMessage && (
                         <Typography
                             variant="small"
