@@ -132,7 +132,7 @@ export const GalleryBarAndListHeader: React.FC<
                             title={t(
                                 collectionSummary.type == "hiddenItems"
                                     ? "hidden_albums"
-                                    : "archived_albums",
+                                    : "section_archive",
                             )}
                             albums={albums}
                             onSelectAlbum={setActiveCollectionID}

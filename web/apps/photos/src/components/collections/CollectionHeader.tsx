@@ -175,9 +175,7 @@ export const CollectionHeader: React.FC<CollectionHeaderProps> = (props) => {
                                 ? { sx: { overflowWrap: "anywhere" } }
                                 : undefined
                         }
-                        name={
-                            type == "archiveItems" ? t("archived_items") : name
-                        }
+                        name={name}
                         description={isAlbum ? undefined : description}
                         descriptionMaxWidth={480}
                         onDescriptionHeightChange={
