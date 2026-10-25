@@ -260,11 +260,16 @@ export function SettingsSearch({ onSelect, children }: SettingsSearchProps) {
                     </>
                 )}
             </Box>
-            {!searching && (
-                <Box sx={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
-                    {children}
-                </Box>
-            )}
+            <Box
+                sx={{
+                    display: searching ? "none" : "block",
+                    flex: 1,
+                    minHeight: 0,
+                    overflowY: "auto",
+                }}
+            >
+                {children}
+            </Box>
         </Box>
     );
 }
