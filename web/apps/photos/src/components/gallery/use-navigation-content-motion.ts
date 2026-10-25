@@ -16,7 +16,12 @@ export const useNavigationContentMotion = (
 
     useLayoutEffect(() => {
         const element = ref.current;
-        if (!element) return;
+        if (!element) {
+            animation.current?.cancel();
+            animation.current = undefined;
+            previousLeft.current = undefined;
+            return;
+        }
         const previousAnimation = animation.current;
         const offset =
             !reduceMotion && previousAnimation?.playState == "running"

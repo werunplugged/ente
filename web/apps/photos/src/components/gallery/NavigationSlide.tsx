@@ -11,42 +11,58 @@ export const NavigationSlide: React.FC<
         width: number | { xs: number; sm: number };
         reduceMotion: boolean;
         rail?: boolean;
+        disabled?: boolean;
     }>
-> = ({ open, width, reduceMotion, rail, children }) => {
-    const positionRef = useNavigationContentMotion(open, reduceMotion);
+> = ({ open, width, reduceMotion, rail, disabled = false, children }) => {
+    const positionRef = useNavigationContentMotion(
+        disabled ? "disabled" : open,
+        reduceMotion,
+    );
     return (
         <Box
-            ref={positionRef}
-            inert={!open}
-            sx={{
-                position: "relative",
-                flexShrink: 0,
-                width: open ? width : 0,
-                height: "100%",
-                pointerEvents: open ? undefined : "none",
-                zIndex: rail ? 2 : 1,
-            }}
+            ref={disabled ? null : positionRef}
+            inert={!disabled && !open}
+            sx={
+                disabled
+                    ? { display: "contents" }
+                    : {
+                          position: "relative",
+                          flexShrink: 0,
+                          width: open ? width : 0,
+                          height: "100%",
+                          pointerEvents: open ? undefined : "none",
+                          zIndex: rail ? 2 : 1,
+                      }
+            }
         >
             <Box
-                sx={{
-                    position: "absolute",
-                    inset: "0 auto 0 0",
-                    width,
-                    overflow: "clip",
-                }}
+                sx={
+                    disabled
+                        ? { display: "contents" }
+                        : {
+                              position: "absolute",
+                              inset: "0 auto 0 0",
+                              width,
+                              overflow: "clip",
+                          }
+                }
             >
                 <Box
-                    sx={{
-                        height: "100%",
-                        transform:
-                            open || reduceMotion
-                                ? "translateX(0)"
-                                : "translateX(-100%)",
-                        opacity: open ? 1 : 0,
-                        transition: reduceMotion
-                            ? `opacity ${navigationMotion.fadeDuration}ms ${navigationMotion.easing}`
-                            : `transform ${navigationMotion.duration}ms ${navigationMotion.easing}, opacity ${navigationMotion.fadeDuration}ms ${navigationMotion.easing}`,
-                    }}
+                    sx={
+                        disabled
+                            ? { display: "contents" }
+                            : {
+                                  height: "100%",
+                                  transform:
+                                      open || reduceMotion
+                                          ? "translateX(0)"
+                                          : "translateX(-100%)",
+                                  opacity: open ? 1 : 0,
+                                  transition: reduceMotion
+                                      ? `opacity ${navigationMotion.fadeDuration}ms ${navigationMotion.easing}`
+                                      : `transform ${navigationMotion.duration}ms ${navigationMotion.easing}, opacity ${navigationMotion.fadeDuration}ms ${navigationMotion.easing}`,
+                              }
+                    }
                 >
                     {children}
                 </Box>

@@ -265,17 +265,14 @@ export const PhotosNavigationShell: React.FC<
                 >
                     {galleryNavigation && !props.isInSearchMode && (
                         <>
-                            {mobile ? (
-                                galleryBar
-                            ) : (
-                                <NavigationSlide
-                                    open={panelOpen}
-                                    width={328}
-                                    reduceMotion={reduceMotion}
-                                >
-                                    {galleryBar}
-                                </NavigationSlide>
-                            )}
+                            <NavigationSlide
+                                open={panelOpen}
+                                width={328}
+                                reduceMotion={reduceMotion}
+                                disabled={mobile}
+                            >
+                                {galleryBar}
+                            </NavigationSlide>
                             <CreateAlbumDialog
                                 {...albumNameInputVisibilityProps}
                                 isHidden={createInHiddenSection}
