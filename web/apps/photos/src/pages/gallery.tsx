@@ -2274,7 +2274,7 @@ const Page: React.FC = () => {
                     {!isCleanupViewOpen && (
                         <>
                             <GalleryBarAndListHeader
-                                hiddenAlbums={sidebarCollectionSummaries}
+                                albums={sidebarCollectionSummaries}
                                 {...{
                                     user,
                                     activeCollection,

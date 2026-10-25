@@ -21,7 +21,6 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import ArchiveOutlinedIcon from "@mui/icons-material/ArchiveOutlined";
-import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import CheckIcon from "@mui/icons-material/Check";
 import LinkIcon from "@mui/icons-material/Link";
 import MoreHorizIcon from "@mui/icons-material/MoreHoriz";
@@ -158,17 +157,6 @@ export const CollectionHeader: React.FC<CollectionHeaderProps> = (props) => {
                         ...(isAlbum && { gridArea: "summary" }),
                     }}
                 >
-                    {type == "archiveItems" && (
-                        <Tooltip title={t("go_back")}>
-                            <IconButton
-                                aria-label={t("go_back")}
-                                onClick={props.onBackToAlbums}
-                                sx={{ width: 32, height: 32 }}
-                            >
-                                <ArrowBackIcon sx={{ fontSize: 20 }} />
-                            </IconButton>
-                        </Tooltip>
-                    )}
                     {isAlbum && showCover && (
                         <Box
                             aria-hidden

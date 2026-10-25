@@ -7,25 +7,27 @@ import AutoSizer from "react-virtualized-auto-sizer";
 import { FixedSizeList, type ListChildComponentProps } from "react-window";
 import { AlbumTile } from "./AlbumTile";
 
-interface HiddenAlbumsHeaderProps {
+interface AlbumsHeaderProps {
+    title: string;
     albums: CollectionSummary[];
     onSelectAlbum: (id: number) => void;
     onBack: () => void;
 }
 
-export const hiddenAlbumsHeaderHeight = 311;
+export const albumsHeaderHeight = 311;
 
-export const HiddenAlbumsHeader = ({
+export const AlbumsHeader = ({
+    title,
     albums,
     onSelectAlbum,
     onBack,
-}: HiddenAlbumsHeaderProps) => {
+}: AlbumsHeaderProps) => {
     const [scrollOffset, setScrollOffset] = useState(0);
 
     return (
         <Stack
             sx={{
-                height: albums.length ? hiddenAlbumsHeaderHeight : 78,
+                height: albums.length ? albumsHeaderHeight : 78,
                 gap: "24px",
             }}
         >
@@ -51,7 +53,7 @@ export const HiddenAlbumsHeader = ({
                         lineHeight: "32px",
                     }}
                 >
-                    {t("hidden_albums")}
+                    {title}
                 </Typography>
             </Stack>
             {albums.length > 0 && (
@@ -92,7 +94,7 @@ export const HiddenAlbumsHeader = ({
                                             : undefined,
                                 }}
                             >
-                                {HiddenAlbumTile}
+                                {HeaderAlbumTile}
                             </FixedSizeList>
                         )}
                     </AutoSizer>
@@ -102,13 +104,13 @@ export const HiddenAlbumsHeader = ({
     );
 };
 
-const HiddenAlbumTile = ({
+const HeaderAlbumTile = ({
     index,
     style,
     data: { albums, onSelectAlbum },
     isScrolling,
 }: ListChildComponentProps<
-    Pick<HiddenAlbumsHeaderProps, "albums" | "onSelectAlbum">
+    Pick<AlbumsHeaderProps, "albums" | "onSelectAlbum">
 >) => {
     const album = albums[index]!;
     return (
