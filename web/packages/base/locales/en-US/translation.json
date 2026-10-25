@@ -801,7 +801,6 @@
     "delete_files_button": "Delete {{count, number}} files",
     "all": "All",
     "my_albums": "My albums",
-    "pick_an_album": "Pick an album",
     "filter_albums": "Filter albums",
     "shared_albums_label": "Shared",
     "received_albums_label": "Received",

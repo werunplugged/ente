@@ -360,7 +360,7 @@ const collectionSelectorTitle = (action: CollectionSelectorAction) =>
     t(
         {
             upload: "upload_to_album",
-            add: "pick_an_album",
+            add: "add_to_album",
             move: "move_to_album",
             restore: "restore_to_album",
             unhide: "unhide_to_album",
