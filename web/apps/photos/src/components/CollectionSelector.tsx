@@ -14,7 +14,6 @@ import {
     Cancel01Icon,
     Image01Icon,
     ImageAdd02Icon,
-    Search01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import ArchiveIcon from "@mui/icons-material/Archive";
@@ -270,13 +269,6 @@ export const CollectionSelector: React.FC<CollectionSelectorProps> = (
                     <SearchField
                         value={searchTerm}
                         onChange={setSearchTerm}
-                        icon={
-                            <HugeiconsIcon
-                                icon={Search01Icon}
-                                size={18}
-                                color="currentColor"
-                            />
-                        }
                         sx={{ minWidth: 0, px: "16px", gap: "12px" }}
                     />
                     <Tabs
