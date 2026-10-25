@@ -123,7 +123,7 @@ export const GalleryBarImpl: React.FC<GalleryBarImplProps> = ({
     const albumListRef = useRef<VariableSizeList | null>(null);
     const searchInputRef = useRef<HTMLInputElement>(null);
     const [peopleSearchQuery, setPeopleSearchQuery] = useState("");
-    const [linksExpanded, setLinksExpanded] = useState(true);
+    const [groupExpanded, setGroupExpanded] = useState(true);
     const searchQuery = mode == "people" ? peopleSearchQuery : albumSearchQuery;
     const setSearchQuery =
         mode == "people" ? setPeopleSearchQuery : onAlbumSearchQueryChange;
@@ -171,7 +171,7 @@ export const GalleryBarImpl: React.FC<GalleryBarImplProps> = ({
     }, [albumFilter]);
     useEffect(() => {
         setPeopleSearchQuery("");
-        if (mode == "links") setLinksExpanded(true);
+        setGroupExpanded(true);
     }, [mode]);
 
     useEffect(() => {
@@ -199,7 +199,10 @@ export const GalleryBarImpl: React.FC<GalleryBarImplProps> = ({
                 ? {
                       type: "collections",
                       collectionSummaries: displayedCollectionSummaries,
-                      indented: mode == "albums" || mode == "links",
+                      indented:
+                          mode == "albums" ||
+                          mode == "links" ||
+                          mode == "hidden-albums",
                       activeCollectionID: activeCollectionID!,
                       onSelectCollectionID,
                   }
@@ -473,6 +476,11 @@ export const GalleryBarImpl: React.FC<GalleryBarImplProps> = ({
         isSearching,
     ]);
 
+    const isGroupOverview =
+        mode == "links"
+            ? activeCollectionID === undefined
+            : activeCollectionID == PseudoCollectionID.hiddenItems;
+
     const navigation = (
         <Stack
             component="nav"
@@ -690,30 +698,31 @@ export const GalleryBarImpl: React.FC<GalleryBarImplProps> = ({
                         )}
                     </AutoSizer>
                 </Box>
-            ) : mode == "links" ? (
+            ) : mode == "links" || mode == "hidden-albums" ? (
                 <Stack
                     role="group"
-                    aria-label={t("links")}
+                    aria-label={t(mode == "links" ? "links" : "section_hidden")}
                     sx={{ flex: 1, minHeight: 0, minWidth: 0 }}
                 >
                     <BarCard
-                        aria-current={
-                            activeCollectionID === undefined
-                                ? "page"
-                                : undefined
-                        }
-                        aria-expanded={isSearching || linksExpanded}
+                        aria-current={isGroupOverview ? "page" : undefined}
+                        aria-expanded={isSearching || groupExpanded}
                         onClick={() => {
-                            setLinksExpanded(
-                                activeCollectionID !== undefined ||
-                                    !linksExpanded,
+                            setGroupExpanded(
+                                !isGroupOverview || !groupExpanded,
                             );
-                            onShowLinksOverview();
+                            if (mode == "links") onShowLinksOverview();
+                            else
+                                onSelectCollectionID(
+                                    PseudoCollectionID.hiddenItems,
+                                );
                             mobileDrawerProps.onClose();
                         }}
                         sx={{ flexShrink: 0, height: rowHeight }}
                     >
-                        <CardText>{t("links")}</CardText>
+                        <CardText>
+                            {t(mode == "links" ? "links" : "section_hidden")}
+                        </CardText>
                         <Box
                             component={HugeiconsIcon}
                             icon={ArrowDown01Icon}
@@ -722,13 +731,13 @@ export const GalleryBarImpl: React.FC<GalleryBarImplProps> = ({
                             sx={{
                                 color: "text.muted",
                                 transform:
-                                    isSearching || linksExpanded
+                                    isSearching || groupExpanded
                                         ? undefined
                                         : "rotate(-90deg)",
                             }}
                         />
                     </BarCard>
-                    {(isSearching || linksExpanded) && items}
+                    {(isSearching || groupExpanded) && items}
                 </Stack>
             ) : (
                 items

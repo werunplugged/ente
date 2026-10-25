@@ -164,6 +164,7 @@ export const SearchBar: React.FC<SearchBarProps> = (props) => {
                     slotProps={{
                         paper: {
                             "aria-label": t("search"),
+                            inert: !open,
                             sx: {
                                 width: "621px",
                                 maxWidth: "calc(100% - 24px)",
