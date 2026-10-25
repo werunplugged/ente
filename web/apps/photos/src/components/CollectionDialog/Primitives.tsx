@@ -1,4 +1,3 @@
-import { collectionDialogSearchFieldSx } from "@/components/CollectionDialog/styles";
 import CloseIcon from "@mui/icons-material/Close";
 import SearchIcon from "@mui/icons-material/Search";
 import { InputBase, Stack, type SxProps, type Theme } from "@mui/material";
@@ -29,7 +28,7 @@ export const CollectionDialogSearchField: React.FC<{
     return (
         <Stack
             direction="row"
-            sx={[collectionDialogSearchFieldSx, ...(isSxArray(sx) ? sx : [sx])]}
+            sx={[searchFieldSx, ...(isSxArray(sx) ? sx : [sx])]}
         >
             {icon ? (
                 <Stack sx={searchIconSx}>{icon}</Stack>
@@ -63,6 +62,16 @@ const searchIconSx = (theme: Theme) => ({
     flexShrink: 0,
     color: "rgba(0 0 0 / 0.4)",
     ...theme.applyStyles("dark", { color: "rgba(255 255 255 / 0.4)" }),
+});
+
+const searchFieldSx = (theme: Theme) => ({
+    alignItems: "center",
+    gap: "10px",
+    height: 44,
+    borderRadius: "16px",
+    backgroundColor: "background.paper",
+    px: "14px",
+    ...theme.applyStyles("dark", { backgroundColor: "#282828" }),
 });
 
 const searchInputSx = {

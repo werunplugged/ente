@@ -1,18 +1,17 @@
 import { CollectionDialogSearchField as SearchField } from "@/components/CollectionDialog/Primitives";
 import {
     collectionDialogFullScreenQuery,
+    collectionDialogHeaderActionsSx as headerActionsSx,
     collectionDialogHeaderRowSx as headerRowSx,
     collectionDialogHeaderSx as headerSx,
     collectionDialogIconButtonSx as iconButtonSx,
     collectionDialogNoResultsSx as noResultsSx,
     collectionDialogPaperSx as paperSx,
-    collectionDialogSearchFieldSx as searchFieldSx,
     collectionDialogTitleSx as titleSx,
 } from "@/components/CollectionDialog/styles";
 import { CollectionsSortOptions } from "@/components/CollectionsSortOptions";
 import {
     Cancel01Icon,
-    FilterHorizontalIcon,
     Image01Icon,
     ImageAdd02Icon,
     Search01Icon,
@@ -252,49 +251,34 @@ export const CollectionSelector: React.FC<CollectionSelectorProps> = (
                     >
                         {collectionSelectorTitle(action)}
                     </Typography>
-                    <IconButton
-                        aria-label={t("close")}
-                        onClick={handleClose}
-                        sx={iconButtonSx}
-                    >
-                        <HugeiconsIcon icon={Cancel01Icon} size={18} />
-                    </IconButton>
-                </Stack>
-                <Stack sx={{ gap: "16px" }}>
-                    <Stack
-                        direction="row"
-                        sx={{ alignItems: "center", gap: "8px" }}
-                    >
-                        <SearchField
-                            value={searchTerm}
-                            onChange={setSearchTerm}
-                            icon={
-                                <HugeiconsIcon
-                                    icon={Search01Icon}
-                                    size={18}
-                                    color="currentColor"
-                                />
-                            }
-                            sx={{
-                                flex: 1,
-                                minWidth: 0,
-                                px: "16px",
-                                gap: "12px",
-                            }}
-                        />
+                    <Stack direction="row" sx={headerActionsSx}>
                         <CollectionsSortOptions
                             activeSortBy={sortBy}
                             onChangeSortBy={setSortBy}
                             variant="v2"
-                            triggerIcon={
-                                <HugeiconsIcon
-                                    icon={FilterHorizontalIcon}
-                                    size={18}
-                                />
-                            }
-                            triggerSx={[searchFieldSx, { width: 44, p: 0 }]}
                         />
+                        <IconButton
+                            aria-label={t("close")}
+                            onClick={handleClose}
+                            sx={iconButtonSx}
+                        >
+                            <HugeiconsIcon icon={Cancel01Icon} size={18} />
+                        </IconButton>
                     </Stack>
+                </Stack>
+                <Stack sx={{ gap: "16px" }}>
+                    <SearchField
+                        value={searchTerm}
+                        onChange={setSearchTerm}
+                        icon={
+                            <HugeiconsIcon
+                                icon={Search01Icon}
+                                size={18}
+                                color="currentColor"
+                            />
+                        }
+                        sx={{ minWidth: 0, px: "16px", gap: "12px" }}
+                    />
                     <Tabs
                         value={category}
                         onChange={(_, value: typeof category) =>
