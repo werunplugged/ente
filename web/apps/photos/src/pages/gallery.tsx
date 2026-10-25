@@ -2213,6 +2213,8 @@ const Page: React.FC = () => {
                                   onAlbumSearchQueryChange: setAlbumSearchQuery,
                                   onShowAlbumOverview: handleShowAlbumOverview,
                                   onShowPeopleOverview: handleShowPeople,
+                                  onShowLinksOverview: () =>
+                                      handleChangeBarMode("links"),
                                   collectionSummaries:
                                       sidebarCollectionSummaries,
                                   visibleAlbumFilters: sidebarAlbumFilters,
@@ -2319,7 +2321,26 @@ const Page: React.FC = () => {
                                 onRemotePull={remotePull}
                                 coverFile={selectedLinkSummary?.coverFile}
                             />
-                        ) : null
+                        ) : (
+                            <AlbumsOverview
+                                albums={sidebarCollectionSummaries}
+                                title={t("links")}
+                                filter="links"
+                                linksByID={
+                                    new Map(
+                                        quickLinks.map((link) => [
+                                            link.id,
+                                            link,
+                                        ]),
+                                    )
+                                }
+                                searchQuery={albumSearchQuery}
+                                sortBy={collectionsSortBy}
+                                onSelectAlbum={selectGalleryCollection}
+                                onCreateAlbum={showAlbumNameInput}
+                                onRemotePull={remotePull}
+                            />
+                        )
                     ) : !isInSearchMode &&
                       !isFirstLoad &&
                       !state.collectionFiles.length &&

@@ -72,6 +72,7 @@ export interface GalleryBarImplProps extends GalleryBarPresentationProps {
     onAlbumSearchQueryChange: (query: string) => void;
     onShowAlbumOverview: (filter: AlbumFilter) => void;
     onShowPeopleOverview: () => void;
+    onShowLinksOverview: () => void;
     collectionSummaries: CollectionSummary[];
     visibleAlbumFilters: typeof albumFilters;
     uncategorizedCollectionSummaryID: number;
@@ -98,6 +99,7 @@ export const GalleryBarImpl: React.FC<GalleryBarImplProps> = ({
     onAlbumSearchQueryChange,
     onShowAlbumOverview,
     onShowPeopleOverview,
+    onShowLinksOverview,
     collectionSummaries,
     visibleAlbumFilters,
     uncategorizedCollectionSummaryID,
@@ -169,6 +171,7 @@ export const GalleryBarImpl: React.FC<GalleryBarImplProps> = ({
     }, [albumFilter]);
     useEffect(() => {
         setPeopleSearchQuery("");
+        if (mode == "links") setLinksExpanded(true);
     }, [mode]);
 
     useEffect(() => {
@@ -695,10 +698,20 @@ export const GalleryBarImpl: React.FC<GalleryBarImplProps> = ({
                     sx={{ flex: 1, minHeight: 0, minWidth: 0 }}
                 >
                     <BarCard
-                        aria-expanded={isSearching || linksExpanded}
-                        onClick={() =>
-                            setLinksExpanded((expanded) => !expanded)
+                        aria-current={
+                            activeCollectionID === undefined
+                                ? "page"
+                                : undefined
                         }
+                        aria-expanded={isSearching || linksExpanded}
+                        onClick={() => {
+                            setLinksExpanded(
+                                activeCollectionID !== undefined ||
+                                    !linksExpanded,
+                            );
+                            onShowLinksOverview();
+                            mobileDrawerProps.onClose();
+                        }}
                         sx={{ flexShrink: 0, height: rowHeight }}
                     >
                         <CardText>{t("links")}</CardText>

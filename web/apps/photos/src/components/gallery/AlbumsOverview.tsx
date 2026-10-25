@@ -1,9 +1,12 @@
 import { useDeleteEmptyAlbums } from "@/components/collections/useDeleteEmptyAlbums";
 import type { RemotePullOpts } from "@/components/gallery";
 import type { AlbumFilter } from "@/utils/album-filters";
-import { Delete02Icon, ImageAdd02Icon } from "@hugeicons/core-free-icons";
+import {
+    Delete02Icon,
+    ImageAdd02Icon,
+    PinIcon,
+} from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import PushPinIcon from "@mui/icons-material/PushPin";
 import {
     Box,
     IconButton,
@@ -14,6 +17,7 @@ import {
     useMediaQuery,
     useTheme,
 } from "@mui/material";
+import type { Collection } from "ente-media/collection";
 import { ItemCard } from "ente-new/photos/components/Tiles";
 import { UnstyledButton } from "ente-new/photos/components/UnstyledButton";
 import type {
@@ -24,11 +28,13 @@ import { t } from "i18next";
 import { useEffect, useRef, useState } from "react";
 import AutoSizer from "react-virtualized-auto-sizer";
 import { FixedSizeList, type ListChildComponentProps } from "react-window";
+import { LinkCopyChip } from "./LinkCopyChip";
 
 interface AlbumsOverviewProps {
     albums: CollectionSummary[];
     title: string;
-    filter: AlbumFilter;
+    filter: AlbumFilter | "links";
+    linksByID?: ReadonlyMap<number, Collection>;
     searchQuery: string;
     sortBy: CollectionsSortBy;
     onSelectAlbum: (id: number) => void;
@@ -40,6 +46,7 @@ export const AlbumsOverview = ({
     albums,
     title,
     filter,
+    linksByID,
     searchQuery,
     sortBy,
     onSelectAlbum,
@@ -73,6 +80,7 @@ export const AlbumsOverview = ({
     const columnGap = compact ? 12 : 22;
     const rowGap = compact ? 16 : 24;
     const cardHeight = tileWidth + 8 + 20 + 2 + 16;
+    const isLinks = filter == "links";
     const displayTitle =
         filter == "shared"
             ? t("album_overview_shared_title")
@@ -125,11 +133,15 @@ export const AlbumsOverview = ({
                                 fontSize: { xs: 12, md: 14 },
                                 lineHeight: "20px",
                                 color: "text.muted",
+                                fontWeight: isLinks ? 500 : undefined,
                             }}
                         >
-                            {t("album_overview_count", {
-                                count: albums.length,
-                            })}
+                            {t(
+                                isLinks
+                                    ? "links_count"
+                                    : "album_overview_count",
+                                { count: albums.length },
+                            )}
                         </Typography>
                     </Stack>
                     {showDeleteEmptyAlbums && (
@@ -194,6 +206,7 @@ export const AlbumsOverview = ({
                                         style={{ overflowX: "hidden" }}
                                         itemData={{
                                             albums,
+                                            linksByID,
                                             columns,
                                             columnGap,
                                             tileWidth,
@@ -215,6 +228,7 @@ export const AlbumsOverview = ({
 };
 
 interface AlbumRowData {
+    linksByID?: ReadonlyMap<number, Collection>;
     albums: CollectionSummary[];
     columns: number;
     columnGap: number;
@@ -283,99 +297,110 @@ const AlbumsRow = ({
                         </AlbumButton>
                     );
                 const album = data.albums[itemIndex - Number(data.showCreate)]!;
-                const badge = album.attributes.has("sharedIncoming")
-                    ? t("album_overview_received_title")
-                    : album.attributes.has("sharedOutgoing") ||
-                        album.attributes.has("sharedViaLink")
-                      ? t("shared_albums_label")
-                      : undefined;
+                const link = data.linksByID?.get(album.id);
+                const badge =
+                    !link && album.attributes.has("sharedIncoming")
+                        ? t("album_overview_received_title")
+                        : album.attributes.has("sharedOutgoing") ||
+                            album.attributes.has("sharedViaLink")
+                          ? t("shared_albums_label")
+                          : undefined;
                 return (
-                    <AlbumButton
+                    <Box
                         key={album.id}
-                        title={album.name}
-                        onClick={() => data.onSelectAlbum(album.id)}
+                        sx={{ position: "relative", width: data.tileWidth }}
                     >
-                        <ItemCard
-                            TileComponent={Cover}
-                            coverFile={album.coverFile}
-                            isScrolling={isScrolling}
+                        <AlbumButton
+                            title={album.name}
+                            onClick={() => data.onSelectAlbum(album.id)}
                         >
-                            {badge && (
-                                <Box
-                                    component="span"
-                                    sx={{
-                                        position: "absolute",
-                                        right: 8,
-                                        bottom: 8,
-                                        height: 24,
-                                        px: "8px",
-                                        borderRadius: "8px",
-                                        bgcolor: "rgba(0,0,0,.55)",
-                                        color: "#fff",
-                                        fontSize: 11,
-                                        fontWeight: 600,
-                                        display: "flex",
-                                        alignItems: "center",
-                                        backdropFilter: "blur(6px)",
-                                        maxWidth: "calc(100% - 16px)",
-                                        overflow: "hidden",
-                                        whiteSpace: "nowrap",
-                                    }}
-                                >
-                                    {badge}
-                                </Box>
-                            )}
-                        </ItemCard>
-                        <Stack
-                            component="span"
-                            sx={{ width: "100%", gap: "2px" }}
-                        >
+                            <ItemCard
+                                TileComponent={Cover}
+                                coverFile={album.coverFile}
+                                isScrolling={isScrolling}
+                            >
+                                {!link && badge && (
+                                    <Box
+                                        component="span"
+                                        sx={{
+                                            position: "absolute",
+                                            right: 8,
+                                            bottom: 8,
+                                            height: 24,
+                                            px: "8px",
+                                            borderRadius: "8px",
+                                            bgcolor: "rgba(0,0,0,.55)",
+                                            color: "#fff",
+                                            fontSize: 11,
+                                            fontWeight: 600,
+                                            display: "flex",
+                                            alignItems: "center",
+                                            backdropFilter: "blur(6px)",
+                                            maxWidth: "calc(100% - 16px)",
+                                            overflow: "hidden",
+                                            whiteSpace: "nowrap",
+                                        }}
+                                    >
+                                        {badge}
+                                    </Box>
+                                )}
+                            </ItemCard>
                             <Stack
                                 component="span"
-                                direction="row"
-                                sx={{
-                                    alignItems: "center",
-                                    gap: "4px",
-                                    minWidth: 0,
-                                }}
+                                sx={{ width: "100%", gap: "2px" }}
                             >
-                                <Typography
+                                <Stack
                                     component="span"
-                                    noWrap
+                                    direction="row"
                                     sx={{
-                                        fontSize: "var(--album-name-size)",
-                                        lineHeight: "20px",
-                                        fontWeight: 500,
+                                        alignItems: "center",
+                                        gap: "4px",
+                                        minWidth: 0,
                                     }}
                                 >
-                                    {album.name}
-                                </Typography>
-                                {(album.attributes.has("pinned") ||
-                                    album.attributes.has("shareePinned")) && (
-                                    <PushPinIcon
+                                    <Typography
+                                        component="span"
+                                        noWrap
                                         sx={{
-                                            flexShrink: 0,
-                                            fontSize: 12,
-                                            color: "text.faint",
+                                            fontSize: "var(--album-name-size)",
+                                            lineHeight: "20px",
+                                            fontWeight: 500,
                                         }}
-                                    />
-                                )}
+                                    >
+                                        {album.name}
+                                    </Typography>
+                                    {(album.attributes.has("pinned") ||
+                                        album.attributes.has(
+                                            "shareePinned",
+                                        )) && (
+                                        <Box
+                                            component={HugeiconsIcon}
+                                            icon={PinIcon}
+                                            size={12}
+                                            sx={{
+                                                flexShrink: 0,
+                                                color: "text.faint",
+                                            }}
+                                        />
+                                    )}
+                                </Stack>
+                                <Typography
+                                    component="span"
+                                    sx={{
+                                        fontSize: "var(--album-count-size)",
+                                        lineHeight: "16px",
+                                        fontWeight: 500,
+                                        color: "text.muted",
+                                    }}
+                                >
+                                    {t("album_items_count", {
+                                        count: album.fileCount,
+                                    })}
+                                </Typography>
                             </Stack>
-                            <Typography
-                                component="span"
-                                sx={{
-                                    fontSize: "var(--album-count-size)",
-                                    lineHeight: "16px",
-                                    fontWeight: 500,
-                                    color: "text.muted",
-                                }}
-                            >
-                                {t("album_items_count", {
-                                    count: album.fileCount,
-                                })}
-                            </Typography>
-                        </Stack>
-                    </AlbumButton>
+                        </AlbumButton>
+                        {link && <LinkCopyChip collection={link} />}
+                    </Box>
                 );
             })}
         </div>

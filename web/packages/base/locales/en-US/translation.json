@@ -803,6 +803,8 @@
     "shared_albums_label": "Shared",
     "received_albums_label": "Received",
     "links": "Links",
+    "links_count_one": "{{count}} link",
+    "links_count_other": "{{count}} links",
     "search_links": "Search links",
     "links_albums_label": "Links",
     "empty_albums": "Empty",
