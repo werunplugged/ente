@@ -2,59 +2,342 @@ package collections
 
 import (
 	"context"
-	"fmt"
-	"github.com/ente-io/museum/ente"
-	"github.com/ente-io/museum/pkg/controller/access"
-	"github.com/ente-io/museum/pkg/utils/array"
-	"github.com/ente-io/museum/pkg/utils/auth"
-	"github.com/ente-io/museum/pkg/utils/time"
-	"github.com/ente-io/stacktrace"
+	"database/sql"
+	"errors"
+	"slices"
+
+	"github.com/ente/museum/ente"
+	"github.com/ente/museum/pkg/controller/access"
+	"github.com/ente/museum/pkg/controller/public"
+	"github.com/ente/museum/pkg/repo"
+	"github.com/ente/museum/pkg/utils/auth"
+	emailUtil "github.com/ente/museum/pkg/utils/email"
+	"github.com/ente/museum/pkg/utils/time"
+	"github.com/ente/stacktrace"
 	"github.com/gin-contrib/requestid"
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
-	"strings"
 )
 
 func (c *CollectionController) Share(ctx *gin.Context, req ente.AlterShareRequest) ([]ente.CollectionUser, error) {
 	fromUserID := auth.GetUserID(ctx.Request.Header)
-	cID := req.CollectionID
-	encryptedKey := req.EncryptedKey
-	toUserEmail := strings.ToLower(strings.TrimSpace(req.Email))
-	// default role type
+	if err := validateSealedCollectionKey(req.EncryptedKey); err != nil {
+		return nil, err
+	}
 	role := ente.VIEWER
 	if req.Role != nil {
 		role = *req.Role
 	}
 
-	toUserID, err := c.UserRepo.GetUserIDWithEmail(toUserEmail)
+	collection, err := c.collectionForShareMutation(req.CollectionID, fromUserID)
+	if err != nil {
+		return nil, err
+	}
+	if !collection.AllowParticipantSharing(role) {
+		return nil, stacktrace.Propagate(ente.ErrBadRequest, "sharing %s is not allowed", collection.Type)
+	}
+
+	toUserID, err := c.UserLookup.LookupUserID(fromUserID, req.Email)
 	if err != nil {
 		return nil, stacktrace.Propagate(err, "")
 	}
-	if toUserID == fromUserID {
-		return nil, stacktrace.Propagate(ente.ErrBadRequest, "Can not share collection with self")
+	if err := validateShareRecipient(fromUserID, collection.Owner.ID, toUserID); err != nil {
+		return nil, err
 	}
-	collection, err := c.CollectionRepo.Get(cID)
+	err = c.CollectionRepo.Share(
+		req.CollectionID,
+		collection.Owner.ID,
+		toUserID,
+		req.EncryptedKey,
+		role,
+		time.Microseconds(),
+	)
 	if err != nil {
 		return nil, stacktrace.Propagate(err, "")
 	}
-	if !collection.AllowSharing() {
-		return nil, stacktrace.Propagate(ente.ErrBadRequest, fmt.Sprintf("sharing %s is not allowed", collection.Type))
+	if collection.App == string(ente.Photos) {
+		go c.PushCtrl.NotifyAlbumShare(ctx.Request.Context(), []int64{toUserID})
 	}
-	if fromUserID != collection.Owner.ID {
-		return nil, stacktrace.Propagate(ente.ErrPermissionDenied, "")
-	}
-	err = c.CollectionRepo.Share(cID, fromUserID, toUserID, encryptedKey, role, time.Microseconds())
-	if err != nil {
-		return nil, stacktrace.Propagate(err, "")
-	}
-	sharees, err := c.GetSharees(ctx, cID, fromUserID)
+	sharees, err := c.GetSharees(ctx, req.CollectionID, fromUserID)
 	if err != nil {
 		return nil, stacktrace.Propagate(err, "")
 	}
 	return sharees, nil
 }
 
+func (c *CollectionController) BatchShare(ctx *gin.Context, shares []ente.AlterShareRequest) ([]ente.CollectionUser, error) {
+	if err := validateBatchShares(shares); err != nil {
+		return nil, err
+	}
+	fromUserID := auth.GetUserID(ctx.Request.Header)
+	collection, err := c.collectionForShareMutation(shares[0].CollectionID, fromUserID)
+	if err != nil {
+		return nil, err
+	}
+	if collection.IsDeleted {
+		return nil, stacktrace.Propagate(ente.ErrCollectionDeleted, "")
+	}
+
+	resolvedShares := make([]repo.CollectionShareItem, 0, len(shares))
+	for _, share := range shares {
+		if err := validateSealedCollectionKey(share.EncryptedKey); err != nil {
+			return nil, ente.NewBadRequestWithMessage(err.Error())
+		}
+		role := ente.VIEWER
+		if share.Role != nil {
+			role = *share.Role
+		}
+		if role != ente.VIEWER && role != ente.COLLABORATOR && role != ente.ADMIN {
+			return nil, ente.NewBadRequestWithMessage("invalid role " + string(role))
+		}
+		if !collection.AllowParticipantSharing(role) {
+			return nil, stacktrace.Propagate(ente.ErrBadRequest, "sharing %s is not allowed", collection.Type)
+		}
+		toUserID, err := c.UserLookup.LookupUserID(fromUserID, share.Email)
+		if err != nil {
+			return nil, stacktrace.Propagate(err, "")
+		}
+		if err := validateShareRecipient(fromUserID, collection.Owner.ID, toUserID); err != nil {
+			return nil, err
+		}
+		resolvedShares = append(resolvedShares, repo.CollectionShareItem{
+			ToUserID:     toUserID,
+			EncryptedKey: share.EncryptedKey,
+			Role:         role,
+		})
+	}
+
+	err = c.CollectionRepo.BatchShare(
+		ctx.Request.Context(),
+		collection.ID,
+		collection.Owner.ID,
+		resolvedShares,
+		time.Microseconds(),
+	)
+	if err != nil {
+		return nil, stacktrace.Propagate(err, "")
+	}
+	if collection.App == string(ente.Photos) {
+		recipients := make([]int64, len(resolvedShares))
+		for i, share := range resolvedShares {
+			recipients[i] = share.ToUserID
+		}
+		go c.PushCtrl.NotifyAlbumShare(ctx.Request.Context(), recipients)
+	}
+	sharees, err := c.GetSharees(ctx, collection.ID, fromUserID)
+	if err != nil {
+		return nil, stacktrace.Propagate(err, "")
+	}
+	return sharees, nil
+}
+
+func validateBatchShares(shares []ente.AlterShareRequest) error {
+	if len(shares) == 0 {
+		return stacktrace.Propagate(ente.ErrBadRequest, "shares are required")
+	}
+	if len(shares) > ente.MaxBatchShareSize {
+		return stacktrace.Propagate(ente.ErrBatchSizeTooLarge, "")
+	}
+	collectionID := shares[0].CollectionID
+	seen := make(map[string]struct{}, len(shares))
+	for _, share := range shares {
+		if share.CollectionID != collectionID {
+			return stacktrace.Propagate(ente.ErrBadRequest, "all shares must have the same collection ID")
+		}
+		email := emailUtil.NormalizeEmail(share.Email)
+		if email == "" {
+			return stacktrace.Propagate(ente.ErrBadRequest, "email is required")
+		}
+		if _, ok := seen[email]; ok {
+			return stacktrace.Propagate(ente.ErrBadRequest, "duplicate email")
+		}
+		seen[email] = struct{}{}
+	}
+	return nil
+}
+
+func (c *CollectionController) BulkShare(
+	ctx *gin.Context,
+	req ente.BulkCollectionShareRequest,
+) ([]ente.BulkCollectionShareResult, error) {
+	if err := validateCollectionShareBatch(req.Collections, req.Source); err != nil {
+		return nil, err
+	}
+	fromUserID := auth.GetUserID(ctx.Request.Header)
+	if err := validateBulkShareRecipient(fromUserID, req.RecipientUserID); err != nil {
+		return nil, err
+	}
+	if err := c.UserLookup.VerifyUserID(
+		fromUserID,
+		req.RecipientEmail,
+		req.RecipientUserID,
+	); err != nil {
+		return nil, stacktrace.Propagate(err, "")
+	}
+	if req.Source == ente.AutomaticShare {
+		sameFamily, err := c.UserRepo.AreUsersInSameFamily(
+			ctx.Request.Context(),
+			fromUserID,
+			req.RecipientUserID,
+		)
+		if err != nil {
+			return nil, err
+		}
+		if !sameFamily {
+			return nil, stacktrace.Propagate(ente.ErrAutomaticShareRecipientNotEligible, "")
+		}
+	}
+
+	notify := false
+	results := make([]ente.BulkCollectionShareResult, 0, len(req.Collections))
+	for _, item := range req.Collections {
+		status, shouldNotify, err := c.shareCollectionWithUserID(
+			ctx,
+			fromUserID,
+			req.RecipientUserID,
+			req.Source,
+			item,
+		)
+		if err != nil {
+			log.WithError(err).WithFields(log.Fields{
+				"collection_id":     item.CollectionID,
+				"from_user_id":      fromUserID,
+				"recipient_user_id": req.RecipientUserID,
+			}).Warn("bulk collection share failed")
+			status = ente.CollectionShareOperationFailed
+		}
+		notify = notify || (err == nil && shouldNotify)
+		results = append(results, ente.BulkCollectionShareResult{
+			CollectionID: item.CollectionID,
+			Status:       status,
+		})
+	}
+	if notify {
+		go c.PushCtrl.NotifyAlbumShare(ctx.Request.Context(), []int64{req.RecipientUserID})
+	}
+	return results, nil
+}
+
+func validateBulkShareRecipient(actorUserID, recipientUserID int64) error {
+	if recipientUserID <= 0 {
+		return stacktrace.Propagate(ente.ErrBadRequest, "invalid recipient user ID")
+	}
+	if actorUserID == recipientUserID {
+		return stacktrace.Propagate(ente.ErrBadRequest, "Can not share collections with self")
+	}
+	return nil
+}
+
+func (c *CollectionController) shareCollectionWithUserID(
+	ctx context.Context,
+	fromUserID int64,
+	toUserID int64,
+	source ente.CollectionShareSource,
+	item ente.BulkCollectionShareItem,
+) (ente.CollectionShareStatus, bool, error) {
+	if err := validateSealedCollectionKey(item.EncryptedKey); err != nil {
+		return "", false, err
+	}
+	collection, err := c.collectionForShareMutation(item.CollectionID, fromUserID)
+	if err != nil {
+		return "", false, err
+	}
+	if source == ente.AutomaticShare && fromUserID != collection.Owner.ID {
+		return "", false, stacktrace.Propagate(ente.ErrPermissionDenied, "")
+	}
+	if !collection.AllowParticipantSharing(item.Role) {
+		return "", false, stacktrace.Propagate(
+			ente.ErrBadRequest,
+			"sharing %s as %s is not allowed",
+			collection.Type,
+			item.Role,
+		)
+	}
+	if err := validateShareRecipient(fromUserID, collection.Owner.ID, toUserID); err != nil {
+		return "", false, err
+	}
+	updationTime := time.Microseconds()
+	if source == ente.ManualShare {
+		err := c.CollectionRepo.Share(
+			item.CollectionID,
+			collection.Owner.ID,
+			toUserID,
+			item.EncryptedKey,
+			item.Role,
+			updationTime,
+		)
+		return ente.CollectionShared, collection.App == string(ente.Photos), err
+	}
+	status, err := c.CollectionRepo.ShareAutomatically(
+		ctx,
+		item.CollectionID,
+		collection.Owner.ID,
+		toUserID,
+		item.EncryptedKey,
+		item.Role,
+		updationTime,
+	)
+	return status, false, err
+}
+
+func (c *CollectionController) collectionForShareMutation(
+	collectionID int64,
+	actorUserID int64,
+) (ente.Collection, error) {
+	collection, err := c.CollectionRepo.Get(collectionID)
+	if err != nil {
+		return ente.Collection{}, stacktrace.Propagate(err, "")
+	}
+	if actorUserID == collection.Owner.ID {
+		return collection, nil
+	}
+	shareeRole, err := c.CollectionRepo.GetCollectionShareeRole(collectionID, actorUserID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ente.Collection{}, stacktrace.Propagate(ente.ErrPermissionDenied, "")
+		}
+		return ente.Collection{}, stacktrace.Propagate(err, "")
+	}
+	if shareeRole == nil || *shareeRole != ente.ADMIN {
+		return ente.Collection{}, stacktrace.Propagate(ente.ErrPermissionDenied, "")
+	}
+	return collection, nil
+}
+
+func validateShareRecipient(actorUserID, ownerUserID, recipientUserID int64) error {
+	if recipientUserID == actorUserID {
+		return stacktrace.Propagate(ente.ErrBadRequest, "Can not share collection with self")
+	}
+	if recipientUserID == ownerUserID {
+		return stacktrace.Propagate(ente.ErrBadRequest, "Can not share collection with owner")
+	}
+	return nil
+}
+
+func validateCollectionShareBatch(
+	items []ente.BulkCollectionShareItem,
+	source ente.CollectionShareSource,
+) error {
+	if !source.IsValid() || len(items) == 0 {
+		return stacktrace.Propagate(ente.ErrBadRequest, "")
+	}
+	if len(items) > ente.MaxCollectionShareBatchSize {
+		return stacktrace.Propagate(ente.ErrBatchSizeTooLarge, "")
+	}
+	seen := make(map[int64]struct{}, len(items))
+	for _, item := range items {
+		if _, exists := seen[item.CollectionID]; exists {
+			return stacktrace.Propagate(ente.ErrBadRequest, "duplicate collection ID %d", item.CollectionID)
+		}
+		seen[item.CollectionID] = struct{}{}
+	}
+	return nil
+}
+
 func (c *CollectionController) JoinViaLink(ctx *gin.Context, req ente.JoinCollectionViaLinkRequest) error {
+	if err := validateSealedCollectionKey(req.EncryptedKey); err != nil {
+		return err
+	}
 	userID := auth.GetUserID(ctx.Request.Header)
 	collection, err := c.CollectionRepo.Get(req.CollectionID)
 	if err != nil {
@@ -64,7 +347,7 @@ func (c *CollectionController) JoinViaLink(ctx *gin.Context, req ente.JoinCollec
 		return stacktrace.Propagate(ente.ErrBadRequest, "owner can not join via link")
 	}
 	if !collection.AllowSharing() {
-		return stacktrace.Propagate(ente.ErrBadRequest, fmt.Sprintf("joining %s is not allowed", collection.Type))
+		return stacktrace.Propagate(ente.ErrBadRequest, "joining %s is not allowed", collection.Type)
 	}
 	collectionLinkToken, err := c.CollectionLinkCtrl.GetActiveCollectionLinkToken(ctx, req.CollectionID)
 	if err != nil {
@@ -72,7 +355,7 @@ func (c *CollectionController) JoinViaLink(ctx *gin.Context, req ente.JoinCollec
 	}
 
 	if canJoin := collectionLinkToken.CanJoin(); canJoin != nil {
-		return stacktrace.Propagate(ente.ErrBadRequest, fmt.Sprintf("can not join collection: %s", canJoin.Error()))
+		return stacktrace.Propagate(ente.ErrBadRequest, "can not join collection: %s", canJoin.Error())
 	}
 	accessToken := auth.GetAccessToken(ctx)
 	if collectionLinkToken.Token != accessToken {
@@ -86,7 +369,9 @@ func (c *CollectionController) JoinViaLink(ctx *gin.Context, req ente.JoinCollec
 	}
 	err = c.BillingCtrl.HasActiveSelfOrFamilySubscription(collection.Owner.ID, true)
 	if err != nil {
-		return stacktrace.Propagate(err, "")
+		if !errors.Is(err, ente.ErrSharingDisabledForFreeAccounts) {
+			return stacktrace.Propagate(err, "")
+		}
 	}
 	role := ente.VIEWER
 	if collectionLinkToken.EnableCollect {
@@ -100,36 +385,146 @@ func (c *CollectionController) JoinViaLink(ctx *gin.Context, req ente.JoinCollec
 	return nil
 }
 
-// UnShare unshares a collection with a user
 func (c *CollectionController) UnShare(ctx *gin.Context, cID int64, fromUserID int64, toUserEmail string) ([]ente.CollectionUser, error) {
-	toUserID, err := c.UserRepo.GetUserIDWithEmail(toUserEmail)
+	collection, err := c.collectionForShareMutation(cID, fromUserID)
 	if err != nil {
-		return nil, stacktrace.Propagate(ente.ErrNotFound, "")
+		return nil, err
 	}
-	collection, err := c.CollectionRepo.Get(cID)
+
+	sharees, err := c.CollectionRepo.GetSharees(cID)
 	if err != nil {
 		return nil, stacktrace.Propagate(err, "")
 	}
-	isLeavingCollection := toUserID == fromUserID
-	if fromUserID != collection.Owner.ID || isLeavingCollection {
+	toUserIndex := shareeIndexForEmail(sharees, toUserEmail)
+	if toUserIndex == -1 {
+		return nil, stacktrace.Propagate(ente.ErrNotFound, "")
+	}
+	toUserID := sharees[toUserIndex].ID
+	if toUserID == fromUserID || toUserID == collection.Owner.ID {
 		return nil, stacktrace.Propagate(ente.ErrPermissionDenied, "")
 	}
+
 	err = c.CollectionRepo.UnShare(cID, toUserID)
 	if err != nil {
 		return nil, stacktrace.Propagate(err, "")
 	}
-	err = c.CastRepo.RevokeForGivenUserAndCollection(ctx, cID, toUserID)
-	if err != nil {
-		return nil, stacktrace.Propagate(err, "")
+	if err := c.cleanupRevokedShare(ctx, cID, toUserID); err != nil {
+		return nil, err
 	}
-	sharees, err := c.GetSharees(ctx, cID, fromUserID)
-	if err != nil {
-		return nil, stacktrace.Propagate(err, "")
-	}
-	return sharees, nil
+	return slices.Delete(sharees, toUserIndex, toUserIndex+1), nil
 }
 
-// Leave leaves the collection owned by someone else,
+func (c *CollectionController) BulkUnShare(
+	ctx *gin.Context,
+	req ente.BulkCollectionUnshareRequest,
+) ([]ente.BulkCollectionShareResult, error) {
+	// Source is request-scoped; share provenance is not persisted.
+	// Automatic callers must exclude shares that should be preserved.
+	if err := validateCollectionUnshareBatch(req.CollectionIDs, req.Source); err != nil {
+		return nil, err
+	}
+	fromUserID := auth.GetUserID(ctx.Request.Header)
+	if err := validateBulkShareRecipient(fromUserID, req.RecipientUserID); err != nil {
+		return nil, err
+	}
+
+	results := make([]ente.BulkCollectionShareResult, 0, len(req.CollectionIDs))
+	for _, collectionID := range req.CollectionIDs {
+		status, err := c.unshareCollectionWithUserID(
+			ctx,
+			collectionID,
+			fromUserID,
+			req.RecipientUserID,
+			req.Source,
+		)
+		if err != nil {
+			log.WithError(err).WithFields(log.Fields{
+				"collection_id":     collectionID,
+				"from_user_id":      fromUserID,
+				"recipient_user_id": req.RecipientUserID,
+			}).Warn("bulk collection unshare failed")
+			status = ente.CollectionShareOperationFailed
+		}
+		results = append(results, ente.BulkCollectionShareResult{
+			CollectionID: collectionID,
+			Status:       status,
+		})
+	}
+	return results, nil
+}
+
+func (c *CollectionController) unshareCollectionWithUserID(
+	ctx context.Context,
+	collectionID int64,
+	fromUserID int64,
+	toUserID int64,
+	source ente.CollectionShareSource,
+) (ente.CollectionShareStatus, error) {
+	collection, err := c.collectionForShareMutation(collectionID, fromUserID)
+	if err != nil {
+		return "", err
+	}
+	if source == ente.AutomaticShare && fromUserID != collection.Owner.ID {
+		return "", stacktrace.Propagate(ente.ErrPermissionDenied, "")
+	}
+	if err := validateShareRecipient(fromUserID, collection.Owner.ID, toUserID); err != nil {
+		return "", err
+	}
+
+	status, err := c.CollectionRepo.UnShareContext(ctx, collectionID, toUserID)
+	if err != nil {
+		return "", stacktrace.Propagate(err, "")
+	}
+	if status == ente.CollectionNotShared {
+		return status, nil
+	}
+	if err := c.cleanupRevokedShare(ctx, collectionID, toUserID); err != nil {
+		return "", err
+	}
+	return status, nil
+}
+
+func (c *CollectionController) cleanupRevokedShare(
+	ctx context.Context,
+	collectionID int64,
+	userID int64,
+) error {
+	if err := c.removeUserSocialActivity(ctx, collectionID, userID); err != nil {
+		return err
+	}
+	if err := c.CastRepo.RevokeForGivenUserAndCollection(ctx, collectionID, userID); err != nil {
+		return stacktrace.Propagate(err, "")
+	}
+	return nil
+}
+
+func validateCollectionUnshareBatch(
+	collectionIDs []int64,
+	source ente.CollectionShareSource,
+) error {
+	if !source.IsValid() || len(collectionIDs) == 0 {
+		return stacktrace.Propagate(ente.ErrBadRequest, "")
+	}
+	if len(collectionIDs) > ente.MaxCollectionShareBatchSize {
+		return stacktrace.Propagate(ente.ErrBatchSizeTooLarge, "")
+	}
+	seen := make(map[int64]struct{}, len(collectionIDs))
+	for _, collectionID := range collectionIDs {
+		if _, exists := seen[collectionID]; exists {
+			return stacktrace.Propagate(ente.ErrBadRequest, "duplicate collection ID %d", collectionID)
+		}
+		seen[collectionID] = struct{}{}
+	}
+	return nil
+}
+
+func shareeIndexForEmail(sharees []ente.CollectionUser, targetEmail string) int {
+	targetEmail = emailUtil.NormalizeEmail(targetEmail)
+	return slices.IndexFunc(sharees, func(sharee ente.CollectionUser) bool {
+		return emailUtil.NormalizeEmail(sharee.Email) == targetEmail
+	})
+}
+
 func (c *CollectionController) Leave(ctx *gin.Context, cID int64) error {
 	userID := auth.GetUserID(ctx.Request.Header)
 	collection, err := c.CollectionRepo.Get(cID)
@@ -143,7 +538,7 @@ func (c *CollectionController) Leave(ctx *gin.Context, cID int64) error {
 	if err != nil {
 		return stacktrace.Propagate(err, "")
 	}
-	if !array.Int64InList(cID, sharedCollectionIDs) {
+	if !slices.Contains(sharedCollectionIDs, cID) {
 		return nil
 	}
 	err = c.CastRepo.RevokeForGivenUserAndCollection(ctx, cID, userID)
@@ -153,6 +548,9 @@ func (c *CollectionController) Leave(ctx *gin.Context, cID int64) error {
 	err = c.CollectionRepo.UnShare(cID, userID)
 	if err != nil {
 		return stacktrace.Propagate(err, "")
+	}
+	if err := c.removeUserSocialActivity(ctx, cID, userID); err != nil {
+		return err
 	}
 	return nil
 }
@@ -176,22 +574,31 @@ func (c *CollectionController) UpdateShareeMagicMetadata(ctx *gin.Context, req e
 	return nil
 }
 
-// ShareURL generates a public auth-token for the given collectionID
 func (c *CollectionController) ShareURL(ctx *gin.Context, userID int64, req ente.CreatePublicAccessTokenRequest) (
 	ente.PublicURL, error) {
+	if err := req.Validate(); err != nil {
+		return ente.PublicURL{}, stacktrace.Propagate(err, "")
+	}
 	collection, err := c.CollectionRepo.Get(req.CollectionID)
 	if err != nil {
 		return ente.PublicURL{}, stacktrace.Propagate(err, "")
 	}
 	if !collection.AllowSharing() {
-		return ente.PublicURL{}, stacktrace.Propagate(ente.ErrBadRequest, fmt.Sprintf("sharing %s is not allowed", collection.Type))
+		return ente.PublicURL{}, stacktrace.Propagate(ente.ErrBadRequest, "sharing %s is not allowed", collection.Type)
 	}
 	if userID != collection.Owner.ID {
 		return ente.PublicURL{}, stacktrace.Propagate(ente.ErrPermissionDenied, "")
 	}
+	valTrue := true
+	if req.EnableJoin == nil {
+		req.EnableJoin = &valTrue
+	}
 	err = c.BillingCtrl.HasActiveSelfOrFamilySubscription(userID, true)
 	if err != nil {
-		return ente.PublicURL{}, stacktrace.Propagate(err, "")
+		if !errors.Is(err, ente.ErrSharingDisabledForFreeAccounts) {
+			return ente.PublicURL{}, stacktrace.Propagate(err, "")
+		}
+		req.DeviceLimit = public.FreeUserDeviceLimit
 	}
 	response, err := c.CollectionLinkCtrl.CreateLink(ctx, req)
 	if err != nil {
@@ -200,7 +607,6 @@ func (c *CollectionController) ShareURL(ctx *gin.Context, userID int64, req ente
 	return response, nil
 }
 
-// UpdateShareURL updates the shared url configuration
 func (c *CollectionController) UpdateShareURL(
 	ctx *gin.Context,
 	userID int64,
@@ -214,7 +620,13 @@ func (c *CollectionController) UpdateShareURL(
 	}
 	err := c.BillingCtrl.HasActiveSelfOrFamilySubscription(userID, true)
 	if err != nil {
-		return nil, stacktrace.Propagate(err, "")
+		if errors.Is(err, ente.ErrSharingDisabledForFreeAccounts) {
+			if req.DeviceLimit != nil && !public.IsAllowedFreeUserDeviceLimit(*req.DeviceLimit) {
+				return nil, stacktrace.Propagate(&ente.ErrLinkEditNotAllowed, "")
+			}
+		} else {
+			return nil, stacktrace.Propagate(err, "")
+		}
 	}
 	response, err := c.CollectionLinkCtrl.UpdateSharedUrl(ctx, req)
 	if err != nil {
@@ -223,7 +635,6 @@ func (c *CollectionController) UpdateShareURL(
 	return &response, nil
 }
 
-// DisableSharedURL disable a public auth-token for the given collectionID
 func (c *CollectionController) DisableSharedURL(ctx context.Context, userID int64, cID int64) error {
 	if err := c.verifyOwnership(cID, userID); err != nil {
 		return stacktrace.Propagate(err, "")
@@ -232,7 +643,6 @@ func (c *CollectionController) DisableSharedURL(ctx context.Context, userID int6
 	return stacktrace.Propagate(err, "")
 }
 
-// GetSharees returns the list of users a collection has been shared with
 func (c *CollectionController) GetSharees(ctx *gin.Context, cID int64, userID int64) ([]ente.CollectionUser, error) {
 	_, err := c.AccessCtrl.GetCollection(ctx, &access.GetCollectionParams{
 		CollectionID: cID,
@@ -248,7 +658,6 @@ func (c *CollectionController) GetSharees(ctx *gin.Context, cID int64, userID in
 	return sharees, nil
 }
 
-// GetPublicDiff returns the changes in the collections since a timestamp, along with hasMore bool flag.
 func (c *CollectionController) GetPublicDiff(ctx *gin.Context, sinceTime int64) ([]ente.File, bool, error) {
 	accessContext := auth.MustGetPublicAccessContext(ctx)
 	reqContextLogger := log.WithFields(log.Fields{
@@ -261,11 +670,28 @@ func (c *CollectionController) GetPublicDiff(ctx *gin.Context, sinceTime int64) 
 	if err != nil {
 		return nil, false, stacktrace.Propagate(err, "")
 	}
-	// hide private metadata before returning files info in diff
+	// Don't expose private metadata in a public diff.
 	for idx := range diff {
 		if diff[idx].MagicMetadata != nil {
 			diff[idx].MagicMetadata = nil
 		}
+		// For public diffs, treat action markers as deleted and strip action details
+		if diff[idx].Action != nil && !diff[idx].IsDeleted {
+			if *diff[idx].Action == ente.ActionRemove || *diff[idx].Action == ente.ActionDeleteSuggested {
+				diff[idx].IsDeleted = true
+			}
+		}
+		diff[idx].Action = nil
+		diff[idx].ActionUserID = nil
+		if diff[idx].Metadata.EncryptedData == "-" && !diff[idx].IsDeleted {
+			// "-" marks a deleted file whose collection entry is stale.
+			reqContextLogger.WithFields(log.Fields{
+				"file_id":    diff[idx].ID,
+				"updated_at": diff[idx].UpdationTime,
+			}).Warning("stale collection_file found")
+			diff[idx].IsDeleted = true
+		}
 	}
+	scrubDeletedFiles(diff)
 	return diff, hasMore, nil
 }
