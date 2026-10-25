@@ -129,7 +129,6 @@ export const AlbumsOverview = ({
                                 fontSize: { xs: 12, md: 14 },
                                 lineHeight: "20px",
                                 color: "text.muted",
-                                fontWeight: isLinks ? 500 : undefined,
                             }}
                         >
                             {t(
