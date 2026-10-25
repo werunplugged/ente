@@ -115,6 +115,7 @@ const renderSearch = (
         onAlbumSearchQueryChange: vi.fn(),
         onShowAlbumOverview: vi.fn(),
         onShowPeopleOverview: vi.fn(),
+        onShowLinksOverview: vi.fn(),
         onShowCollectionSummary: vi.fn(),
         onSelectCollectionID: vi.fn(),
         onCreateAlbum: vi.fn(),

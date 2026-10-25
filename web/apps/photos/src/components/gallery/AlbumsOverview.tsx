@@ -1,9 +1,12 @@
 import { useDeleteEmptyAlbums } from "@/components/collections/useDeleteEmptyAlbums";
 import type { RemotePullOpts } from "@/components/gallery";
 import type { AlbumFilter } from "@/utils/album-filters";
-import { Delete02Icon, ImageAdd02Icon } from "@hugeicons/core-free-icons";
+import {
+    Delete02Icon,
+    ImageAdd02Icon,
+    PinIcon,
+} from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import PushPinIcon from "@mui/icons-material/PushPin";
 import {
     Box,
     IconButton,
@@ -28,7 +31,7 @@ import { FixedSizeList, type ListChildComponentProps } from "react-window";
 interface AlbumsOverviewProps {
     albums: CollectionSummary[];
     title: string;
-    filter: AlbumFilter;
+    filter: AlbumFilter | "links";
     searchQuery: string;
     sortBy: CollectionsSortBy;
     onSelectAlbum: (id: number) => void;
@@ -73,6 +76,7 @@ export const AlbumsOverview = ({
     const columnGap = compact ? 12 : 22;
     const rowGap = compact ? 16 : 24;
     const cardHeight = tileWidth + 8 + 20 + 2 + 16;
+    const isLinks = filter == "links";
     const displayTitle =
         filter == "shared"
             ? t("album_overview_shared_title")
@@ -127,9 +131,12 @@ export const AlbumsOverview = ({
                                 color: "text.muted",
                             }}
                         >
-                            {t("album_overview_count", {
-                                count: albums.length,
-                            })}
+                            {t(
+                                isLinks
+                                    ? "links_count"
+                                    : "album_overview_count",
+                                { count: albums.length },
+                            )}
                         </Typography>
                     </Stack>
                     {showDeleteEmptyAlbums && (
@@ -194,6 +201,7 @@ export const AlbumsOverview = ({
                                         style={{ overflowX: "hidden" }}
                                         itemData={{
                                             albums,
+                                            isLinks,
                                             columns,
                                             columnGap,
                                             tileWidth,
@@ -215,6 +223,7 @@ export const AlbumsOverview = ({
 };
 
 interface AlbumRowData {
+    isLinks: boolean;
     albums: CollectionSummary[];
     columns: number;
     columnGap: number;
@@ -300,7 +309,7 @@ const AlbumsRow = ({
                             coverFile={album.coverFile}
                             isScrolling={isScrolling}
                         >
-                            {badge && (
+                            {!data.isLinks && badge && (
                                 <Box
                                     component="span"
                                     sx={{
@@ -352,10 +361,12 @@ const AlbumsRow = ({
                                 </Typography>
                                 {(album.attributes.has("pinned") ||
                                     album.attributes.has("shareePinned")) && (
-                                    <PushPinIcon
+                                    <Box
+                                        component={HugeiconsIcon}
+                                        icon={PinIcon}
+                                        size={12}
                                         sx={{
                                             flexShrink: 0,
-                                            fontSize: 12,
                                             color: "text.faint",
                                         }}
                                     />

@@ -72,6 +72,7 @@ export interface GalleryBarImplProps extends GalleryBarPresentationProps {
     onAlbumSearchQueryChange: (query: string) => void;
     onShowAlbumOverview: (filter: AlbumFilter) => void;
     onShowPeopleOverview: () => void;
+    onShowLinksOverview: () => void;
     collectionSummaries: CollectionSummary[];
     visibleAlbumFilters: typeof albumFilters;
     uncategorizedCollectionSummaryID: number;
@@ -98,6 +99,7 @@ export const GalleryBarImpl: React.FC<GalleryBarImplProps> = ({
     onAlbumSearchQueryChange,
     onShowAlbumOverview,
     onShowPeopleOverview,
+    onShowLinksOverview,
     collectionSummaries,
     visibleAlbumFilters,
     uncategorizedCollectionSummaryID,
@@ -121,6 +123,7 @@ export const GalleryBarImpl: React.FC<GalleryBarImplProps> = ({
     const albumListRef = useRef<VariableSizeList | null>(null);
     const searchInputRef = useRef<HTMLInputElement>(null);
     const [peopleSearchQuery, setPeopleSearchQuery] = useState("");
+    const [linksExpanded, setLinksExpanded] = useState(true);
     const searchQuery = mode == "people" ? peopleSearchQuery : albumSearchQuery;
     const setSearchQuery =
         mode == "people" ? setPeopleSearchQuery : onAlbumSearchQueryChange;
@@ -168,6 +171,7 @@ export const GalleryBarImpl: React.FC<GalleryBarImplProps> = ({
     }, [albumFilter]);
     useEffect(() => {
         setPeopleSearchQuery("");
+        if (mode == "links") setLinksExpanded(true);
     }, [mode]);
 
     useEffect(() => {
@@ -195,7 +199,7 @@ export const GalleryBarImpl: React.FC<GalleryBarImplProps> = ({
                 ? {
                       type: "collections",
                       collectionSummaries: displayedCollectionSummaries,
-                      indented: mode == "albums",
+                      indented: mode == "albums" || mode == "links",
                       activeCollectionID: activeCollectionID!,
                       onSelectCollectionID,
                   }
@@ -687,6 +691,46 @@ export const GalleryBarImpl: React.FC<GalleryBarImplProps> = ({
                         )}
                     </AutoSizer>
                 </Box>
+            ) : mode == "links" ? (
+                <Stack
+                    role="group"
+                    aria-label={t("links")}
+                    sx={{ flex: 1, minHeight: 0, minWidth: 0 }}
+                >
+                    <BarCard
+                        aria-current={
+                            activeCollectionID === undefined
+                                ? "page"
+                                : undefined
+                        }
+                        aria-expanded={isSearching || linksExpanded}
+                        onClick={() => {
+                            setLinksExpanded(
+                                activeCollectionID !== undefined ||
+                                    !linksExpanded,
+                            );
+                            onShowLinksOverview();
+                            mobileDrawerProps.onClose();
+                        }}
+                        sx={{ flexShrink: 0, height: rowHeight }}
+                    >
+                        <CardText>{t("links")}</CardText>
+                        <Box
+                            component={HugeiconsIcon}
+                            icon={ArrowDown01Icon}
+                            size={16}
+                            strokeWidth={1.8}
+                            sx={{
+                                color: "text.muted",
+                                transform:
+                                    isSearching || linksExpanded
+                                        ? undefined
+                                        : "rotate(-90deg)",
+                            }}
+                        />
+                    </BarCard>
+                    {(isSearching || linksExpanded) && items}
+                </Stack>
             ) : (
                 items
             )}
