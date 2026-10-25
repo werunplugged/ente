@@ -5,8 +5,13 @@ import {
     type CollectionShareProps,
 } from "@/components/collections/CollectionShare";
 import type { FileListHeaderOrFooter } from "@/components/FileList";
+import {
+    HiddenAlbumsHeader,
+    hiddenAlbumsHeaderHeight,
+} from "@/components/gallery/HiddenAlbumsHeader";
 import { PeopleHeader } from "@/components/gallery/PeopleHeader";
 import type { GalleryBarMode } from "@/components/gallery/reducer";
+import { Box } from "@mui/material";
 import { useModalVisibility } from "ente-base/components/utils/modal";
 import type { Collection } from "ente-media/collection";
 import {
@@ -29,6 +34,7 @@ type GalleryBarAndListHeaderProps = {
     mode: GalleryBarMode;
     shouldHide: boolean;
     collectionSummary: CollectionSummary | undefined;
+    hiddenAlbums: CollectionSummary[];
     activeCollection: Collection | undefined;
     activePerson: Person | undefined;
     people: Person[];
@@ -58,6 +64,7 @@ export const GalleryBarAndListHeader: React.FC<
     mode,
     user,
     collectionSummary,
+    hiddenAlbums,
     activeCollection,
     setActiveCollectionID,
     setBlockingLoad,
@@ -112,27 +119,38 @@ export const GalleryBarAndListHeader: React.FC<
             (activeCollection ||
                 collectionSummary.id <= PseudoCollectionID.all);
 
+        const showHiddenAlbums = collectionSummary?.type == "hiddenItems";
+
         setFileListHeader({
             component: shouldRenderCollectionHeader ? (
-                <CollectionHeader
-                    {...{
-                        activeCollection,
-                        setActiveCollectionID,
-                        isActiveCollectionDownloadInProgress,
-                        onRemotePull,
-                        onAddSaveGroup,
-                        onShowMap,
-                        onCollectionSlideshow,
-                        onBackToAlbums,
-                    }}
-                    collectionSummary={collectionSummary}
-                    onCollectionShare={openCollectionShare}
-                    onCollectionManageLink={openCollectionManageLink}
-                    onCollectionCast={showCollectionCast}
-                    onEditAlbumDetails={onEditAlbumDetails}
-                    hasActiveFileSelection={hasActiveFileSelection}
-                    onDescriptionHeightChange={setDescriptionHeight}
-                />
+                <Box sx={{ width: "100%" }}>
+                    {showHiddenAlbums && (
+                        <HiddenAlbumsHeader
+                            albums={hiddenAlbums}
+                            onSelectAlbum={setActiveCollectionID}
+                            onBack={onBackToAlbums}
+                        />
+                    )}
+                    <CollectionHeader
+                        {...{
+                            activeCollection,
+                            setActiveCollectionID,
+                            isActiveCollectionDownloadInProgress,
+                            onRemotePull,
+                            onAddSaveGroup,
+                            onShowMap,
+                            onCollectionSlideshow,
+                            onBackToAlbums,
+                        }}
+                        collectionSummary={collectionSummary}
+                        onCollectionShare={openCollectionShare}
+                        onCollectionManageLink={openCollectionManageLink}
+                        onCollectionCast={showCollectionCast}
+                        onEditAlbumDetails={onEditAlbumDetails}
+                        hasActiveFileSelection={hasActiveFileSelection}
+                        onDescriptionHeightChange={setDescriptionHeight}
+                    />
+                </Box>
             ) : mode != "people" && collectionSummary ? (
                 <GalleryItemsHeaderAdapter>
                     <GalleryItemsSummary
@@ -149,13 +167,21 @@ export const GalleryBarAndListHeader: React.FC<
             ) : (
                 <></>
             ),
-            height: 72 + (albumDescription ? descriptionHeight : 0),
+            height:
+                72 +
+                (showHiddenAlbums
+                    ? hiddenAlbums.length
+                        ? hiddenAlbumsHeaderHeight
+                        : 78
+                    : 0) +
+                (albumDescription ? descriptionHeight : 0),
         });
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [
         shouldHide,
         mode,
         collectionSummary,
+        hiddenAlbums,
         activeCollection,
         isActiveCollectionDownloadInProgress,
         activePerson,

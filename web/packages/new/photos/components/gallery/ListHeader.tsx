@@ -15,6 +15,7 @@ interface GalleryItemsSummaryProps {
     descriptionMaxWidth?: number;
     nameProps?: TypographyProps;
     fileCount: number;
+    countLabel?: string;
     endIcon?: React.ReactNode;
     // This cannot be the only way to invoke the action; it is mouse-only.
     onNameClick?: () => void;
@@ -27,6 +28,7 @@ export const GalleryItemsSummary: React.FC<GalleryItemsSummaryProps> = ({
     descriptionMaxWidth,
     nameProps,
     fileCount,
+    countLabel,
     endIcon,
     onNameClick,
     onDescriptionHeightChange,
@@ -71,7 +73,7 @@ export const GalleryItemsSummary: React.FC<GalleryItemsSummaryProps> = ({
                     lineHeight: "20px",
                 }}
             >
-                {t("photos_count", { count: fileCount })}
+                {countLabel ?? t("photos_count", { count: fileCount })}
             </Typography>
             {endIcon && (
                 <Box sx={{ svg: { fontSize: "17px", color: "text.muted" } }}>
