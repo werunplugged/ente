@@ -49,7 +49,14 @@ export function SettingsSearch({ onSelect, children }: SettingsSearchProps) {
     });
 
     return (
-        <>
+        <Box
+            sx={{
+                display: "flex",
+                flexDirection: "column",
+                flex: 1,
+                minHeight: 0,
+            }}
+        >
             <Box
                 {...getRootProps({
                     onKeyDown: (event: KeyboardEvent<HTMLDivElement>) => {
@@ -59,7 +66,13 @@ export function SettingsSearch({ onSelect, children }: SettingsSearchProps) {
                         }
                     },
                 })}
-                sx={{ mb: 2 }}
+                sx={{
+                    display: "flex",
+                    flexDirection: "column",
+                    flex: searching ? 1 : "0 0 auto",
+                    minHeight: 0,
+                    mb: 2,
+                }}
             >
                 <Stack
                     direction="row"
@@ -68,6 +81,7 @@ export function SettingsSearch({ onSelect, children }: SettingsSearchProps) {
                         gap: 1,
                         px: 2,
                         height: 52,
+                        flexShrink: 0,
                         borderRadius: "16px",
                         bgcolor: "background.paper",
                         "&:focus-within": {
@@ -123,6 +137,7 @@ export function SettingsSearch({ onSelect, children }: SettingsSearchProps) {
                             {...getListboxProps()}
                             aria-label={t("search_settings")}
                             sx={{
+                                position: "relative",
                                 display: "flex",
                                 flexDirection: "column",
                                 gap: 0.75,
@@ -130,6 +145,9 @@ export function SettingsSearch({ onSelect, children }: SettingsSearchProps) {
                                 p: 0,
                                 mb: 0,
                                 mt: 2,
+                                flex: options.length ? 1 : undefined,
+                                minHeight: 0,
+                                overflowY: "auto",
                             }}
                         >
                             {options.map((option, index) => {
@@ -156,6 +174,7 @@ export function SettingsSearch({ onSelect, children }: SettingsSearchProps) {
                                             px: 1.5,
                                             py: 1.5,
                                             minHeight: 64,
+                                            flexShrink: 0,
                                             boxSizing: "border-box",
                                             borderRadius: "16px",
                                             border: "1px solid",
@@ -241,7 +260,11 @@ export function SettingsSearch({ onSelect, children }: SettingsSearchProps) {
                     </>
                 )}
             </Box>
-            {!searching && children}
-        </>
+            {!searching && (
+                <Box sx={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
+                    {children}
+                </Box>
+            )}
+        </Box>
     );
 }
