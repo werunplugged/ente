@@ -1,17 +1,15 @@
 import { Search01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import CloseIcon from "@mui/icons-material/Close";
-import { InputBase, Stack, type SxProps, type Theme } from "@mui/material";
-import { isSxArray } from "ente-base/components/utils/sx";
+import { InputBase, Stack, type Theme } from "@mui/material";
 import { t } from "i18next";
 import React, { useRef } from "react";
 
 export const CollectionDialogSearchField: React.FC<{
-    sx?: SxProps<Theme>;
     placeholder?: string;
     value: string;
     onChange: (value: string) => void;
-}> = ({ value, onChange, sx = [], placeholder = t("albums_search_hint") }) => {
+}> = ({ value, onChange, placeholder = t("albums_search_hint") }) => {
     const inputRef = useRef<HTMLInputElement>(null);
 
     const handleClear = () => {
@@ -20,10 +18,7 @@ export const CollectionDialogSearchField: React.FC<{
     };
 
     return (
-        <Stack
-            direction="row"
-            sx={[searchFieldSx, ...(isSxArray(sx) ? sx : [sx])]}
-        >
+        <Stack direction="row" sx={searchFieldSx}>
             <Stack sx={searchIconSx}>
                 <HugeiconsIcon
                     icon={Search01Icon}
@@ -61,11 +56,12 @@ const searchIconSx = (theme: Theme) => ({
 
 const searchFieldSx = (theme: Theme) => ({
     alignItems: "center",
-    gap: "10px",
+    minWidth: 0,
+    gap: "12px",
     height: 44,
     borderRadius: "16px",
     backgroundColor: "background.paper",
-    px: "14px",
+    px: "16px",
     ...theme.applyStyles("dark", { backgroundColor: "#282828" }),
 });
 

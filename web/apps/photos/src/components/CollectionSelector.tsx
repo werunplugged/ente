@@ -266,11 +266,7 @@ export const CollectionSelector: React.FC<CollectionSelectorProps> = (
                     </Stack>
                 </Stack>
                 <Stack sx={{ gap: "16px" }}>
-                    <SearchField
-                        value={searchTerm}
-                        onChange={setSearchTerm}
-                        sx={{ minWidth: 0, px: "16px", gap: "12px" }}
-                    />
+                    <SearchField value={searchTerm} onChange={setSearchTerm} />
                     <Tabs
                         value={category}
                         onChange={(_, value: typeof category) =>
