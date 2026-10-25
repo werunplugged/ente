@@ -91,6 +91,7 @@ import React, {
     useRef,
     useState,
 } from "react";
+import { createPortal } from "react-dom";
 import { Trans } from "react-i18next";
 import { z } from "zod";
 
@@ -1704,7 +1705,7 @@ type ManagePublicShareOptionsProps = {
               variant?: "drawer";
               onRootClose: () => void;
           } & ModalVisibilityProps)
-        | { variant: "inline" }
+        | { variant: "inline"; removeLinkContainer?: HTMLElement | null }
     );
 
 export const ManagePublicShareOptions: React.FC<
@@ -1871,6 +1872,31 @@ export const ManagePublicShareOptions: React.FC<
     );
 
     if (props.variant == "inline") {
+        const removeLinkButton = (
+            <FocusVisibleButton
+                color="critical"
+                onClick={handleRemovePublicLink}
+                sx={{
+                    alignSelf: props.removeLinkContainer
+                        ? "stretch"
+                        : "flex-start",
+                    ml: props.removeLinkContainer ? 0 : 1,
+                    px: 1,
+                    py: 1,
+                    bgcolor: "transparent",
+                    color: "critical.main",
+                    fontSize: 14,
+                    fontWeight: 500,
+                    width: props.removeLinkContainer ? "100%" : undefined,
+                    height: props.removeLinkContainer ? 52 : undefined,
+                    textDecoration: "underline",
+                    borderRadius: "20px",
+                    "&:hover": { bgcolor: "fill.faintHover" },
+                }}
+            >
+                {t("remove_link")}
+            </FocusVisibleButton>
+        );
         return (
             <ThemeProvider theme={sidebarTheme}>
                 <Stack
@@ -1960,23 +1986,12 @@ export const ManagePublicShareOptions: React.FC<
                             </SidebarDrawerDepthContext.Provider>
                         </SidebarPanelContext.Provider>
                     </Box>
-                    <FocusVisibleButton
-                        color="critical"
-                        onClick={handleRemovePublicLink}
-                        sx={{
-                            alignSelf: "flex-start",
-                            ml: 1,
-                            px: 1,
-                            py: 1,
-                            bgcolor: "transparent",
-                            color: "critical.main",
-                            fontSize: 14,
-                            fontWeight: 600,
-                            "&:hover": { bgcolor: "fill.faintHover" },
-                        }}
-                    >
-                        {t("remove_link")}
-                    </FocusVisibleButton>
+                    {props.removeLinkContainer
+                        ? createPortal(
+                              removeLinkButton,
+                              props.removeLinkContainer,
+                          )
+                        : removeLinkButton}
                     {errorMessage && (
                         <Typography
                             variant="small"

@@ -51,6 +51,8 @@ export const PublicLinkDetails = ({
     const { show: showPickCoverPhoto, props: pickCoverPhotoVisibilityProps } =
         useModalVisibility();
     const { customDomain } = useSettingsSnapshot();
+    const [removeLinkContainer, setRemoveLinkContainer] =
+        useState<HTMLDivElement | null>(null);
     const [shareState, setShareState] = useState({
         collection,
         publicURL: collection.publicURLs[0],
@@ -89,6 +91,9 @@ export const PublicLinkDetails = ({
     return (
         <Box
             sx={{
+                display: "flex",
+                flexDirection: "column",
+                containerType: "inline-size",
                 flex: 1,
                 minHeight: 0,
                 overflow: "auto",
@@ -126,8 +131,18 @@ export const PublicLinkDetails = ({
                 </Typography>
             </Stack>
             <Stack
-                direction="row"
-                sx={{ flexWrap: "wrap", gap: "40px", alignItems: "flex-start" }}
+                sx={{
+                    display: "grid",
+                    gridTemplateColumns: "minmax(0, 1fr)",
+                    flex: 1,
+                    gap: "28px",
+                    alignContent: "start",
+                    alignItems: "start",
+                    "@container (min-width: 720px)": {
+                        gridTemplateColumns: "minmax(0, 364px) minmax(0, 1fr)",
+                        columnGap: "44px",
+                    },
+                }}
             >
                 <Stack sx={{ width: "100%", maxWidth: 364, gap: "14px" }}>
                     <Box sx={{ position: "relative" }}>
@@ -244,19 +259,15 @@ export const PublicLinkDetails = ({
                     >
                         {t("open_album")}
                     </FocusVisibleButton>
+                    <Box ref={setRemoveLinkContainer} />
                 </Stack>
                 {collection.owner.id === user.id &&
                     publicURL &&
                     resolvedURL && (
-                        <Box
-                            sx={{
-                                flex: "1 1 320px",
-                                minWidth: 0,
-                                maxWidth: 520,
-                            }}
-                        >
+                        <Box sx={{ minWidth: 0 }}>
                             <ManagePublicShareOptions
                                 variant="inline"
+                                removeLinkContainer={removeLinkContainer}
                                 {...{
                                     collection,
                                     publicURL,
