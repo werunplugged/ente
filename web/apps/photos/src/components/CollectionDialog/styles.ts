@@ -39,11 +39,6 @@ export const collectionDialogHeaderRowSx = {
     justifyContent: "space-between",
     gap: "12px",
 };
-export const collectionDialogHeaderActionsSx = {
-    alignItems: "center",
-    gap: 1,
-    flexShrink: 0,
-};
 export const collectionDialogTitleSx = {
     fontSize: 24,
     lineHeight: "32px",
@@ -69,13 +64,6 @@ export const collectionDialogIconButtonSx = (theme: Theme) => ({
         backgroundColor: "rgba(255 255 255 / 0.12)",
     }),
 });
-export const collectionDialogDividerSx = (theme: Theme) => ({
-    height: "1px",
-    backgroundColor: "rgba(0 0 0 / 0.06)",
-    ...theme.applyStyles("dark", {
-        backgroundColor: "rgba(255 255 255 / 0.08)",
-    }),
-});
 export const collectionDialogNoResultsSx = {
     flex: 1,
     display: "flex",
@@ -83,3 +71,13 @@ export const collectionDialogNoResultsSx = {
     alignItems: "center",
     minHeight: 154,
 };
+
+export const collectionDialogSearchFieldSx = (theme: Theme) => ({
+    alignItems: "center",
+    gap: "10px",
+    height: 44,
+    borderRadius: "16px",
+    backgroundColor: "background.paper",
+    px: "14px",
+    ...theme.applyStyles("dark", { backgroundColor: "#282828" }),
+});

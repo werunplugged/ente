@@ -138,7 +138,6 @@ export const PhotosNavigationShell: React.FC<
         if (
             galleryNavigation &&
             !props.isInSearchMode &&
-            mode != "links" &&
             ((props.mode == mode &&
                 galleryNavigation.activeCollectionID !=
                     PseudoCollectionID.all) ||

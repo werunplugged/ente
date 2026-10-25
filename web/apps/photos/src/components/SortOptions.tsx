@@ -9,11 +9,14 @@ import {
 } from "@mui/material";
 import type { MenuProps } from "@mui/material/Menu";
 import { ContextMenu, ContextMenuItem } from "ente-base/components/ContextMenu";
+import { isSxArray } from "ente-base/components/utils/sx";
 import { t } from "i18next";
 import React, { useRef, useState } from "react";
 
 export interface SortOptionsAppearanceProps {
     variant?: "default" | "v2";
+    triggerIcon?: React.ReactNode;
+    triggerSx?: IconButtonProps["sx"];
     transparentTriggerButtonBackground?: boolean;
 }
 
@@ -42,6 +45,8 @@ export function SortOptions<Category extends string>({
     options,
     onChange,
     variant = "default",
+    triggerIcon,
+    triggerSx = [],
     transparentTriggerButtonBackground,
 }: SortOptionsProps<Category>) {
     const [anchorEl, setAnchorEl] = useState<MenuProps["anchorEl"]>();
@@ -79,9 +84,16 @@ export function SortOptions<Category extends string>({
                 aria-haspopup="true"
                 aria-expanded={anchorEl ? "true" : undefined}
                 aria-label={isV2 ? t("sort_by") : undefined}
-                sx={triggerButtonSxProps}
+                sx={[
+                    ...(isSxArray(triggerButtonSxProps)
+                        ? triggerButtonSxProps
+                        : [triggerButtonSxProps]),
+                    ...(isSxArray(triggerSx) ? triggerSx : [triggerSx]),
+                ]}
             >
-                <SortIcon sx={isV2 ? { fontSize: 20 } : undefined} />
+                {triggerIcon ?? (
+                    <SortIcon sx={isV2 ? { fontSize: 20 } : undefined} />
+                )}
             </IconButton>
             <ContextMenu
                 id={ariaID}
