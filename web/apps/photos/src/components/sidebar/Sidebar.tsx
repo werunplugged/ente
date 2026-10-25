@@ -62,6 +62,7 @@ import { Trans } from "react-i18next";
 import { FreeUpSpace, type FreeUpSpaceAction } from "./FreeUpSpace";
 import { Help, type HelpAction } from "./Help";
 import { ReferralSettings } from "./ReferralSettings";
+import { SettingsSearch } from "./SettingsSearch";
 import { WatchFolder } from "./WatchFolder";
 import { SubscriptionCard } from "./account/SubscriptionCard";
 import { Account, type AccountAction } from "./accounts/Account";
@@ -295,7 +296,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
             onClose={onClose}
             onEnter={pendingAction || hasOpenSection ? undefined : showAccount}
             menu={
-                <>
+                <SettingsSearch
+                    key={String(open)}
+                    onSelect={performSidebarAction}
+                >
                     <UserDetailsSection
                         sidebarOpen={open}
                         {...{
@@ -334,7 +338,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         <ExitSection onLogout={handleLogout} />
                         <InfoSection />
                     </Stack>
-                </>
+                </SettingsSearch>
             }
         >
             <AttributedMiniDialog
