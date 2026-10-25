@@ -187,20 +187,13 @@ export const CollectionHeader: React.FC<CollectionHeaderProps> = (props) => {
                                 ? { sx: { overflowWrap: "anywhere" } }
                                 : undefined
                         }
-                        name={
-                            type == "hiddenItems" ? t("section_hidden") : name
-                        }
+                        name={name}
                         description={isAlbum ? undefined : description}
                         descriptionMaxWidth={480}
                         onDescriptionHeightChange={
                             isAlbum ? undefined : onDescriptionHeightChange
                         }
                         fileCount={fileCount}
-                        countLabel={
-                            type == "hiddenItems"
-                                ? t("album_items_count", { count: fileCount })
-                                : undefined
-                        }
                         endIcon={<EndIcon />}
                     />
                 </Stack>
@@ -722,7 +715,12 @@ const CollectionHeaderOptions: React.FC<CollectionHeaderProps> = ({
                         {isActiveCollectionDownloadInProgress() ? (
                             <ActivityIndicator size="20px" />
                         ) : (
-                            <DownloadIcon />
+                            <HugeiconsIcon
+                                icon={Download04Icon}
+                                size={22}
+                                strokeWidth={1.5}
+                                aria-hidden
+                            />
                         )}
                         {downloadOptionLabel(collectionSummary)}
                     </ContextMenuItem>
@@ -990,15 +988,6 @@ type DownloadQuickOptionProps = OptionProps & {
     collectionSummary: CollectionSummary;
 };
 
-const DownloadIcon: React.FC = () => (
-    <HugeiconsIcon
-        icon={Download04Icon}
-        size={22}
-        strokeWidth={1.5}
-        aria-hidden
-    />
-);
-
 const DownloadQuickOption: React.FC<DownloadQuickOptionProps> = ({
     collectionSummary,
     disabled,
@@ -1020,7 +1009,12 @@ const DownloadQuickOption: React.FC<DownloadQuickOptionProps> = ({
                         justifyContent: "center",
                     }}
                 >
-                    <DownloadIcon />
+                    <HugeiconsIcon
+                        icon={Download04Icon}
+                        size={22}
+                        strokeWidth={1.5}
+                        aria-hidden
+                    />
                 </Box>
             </IconButton>
         </span>

@@ -13,7 +13,6 @@ interface HiddenAlbumsHeaderProps {
     onBack: () => void;
 }
 
-// Includes the spacing before the hidden-items summary in the virtualized list.
 export const hiddenAlbumsHeaderHeight = 311;
 
 export const HiddenAlbumsHeader = ({
