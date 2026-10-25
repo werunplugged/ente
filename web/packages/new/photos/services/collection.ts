@@ -1374,10 +1374,6 @@ export const updatePublicURL = async (
     return z.object({ result: RemotePublicURL }).parse(await res.json()).result;
 };
 
-/**
- * Remove a public link, deleting an unshared quick link album while keeping its
- * files. Regular albums and albums with participants keep their collection.
- */
 export const removePublicLink = async (collection: Collection) => {
     if (
         collection.magicMetadata?.data.subType == CollectionSubType.quicklink &&
