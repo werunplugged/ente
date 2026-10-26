@@ -24,6 +24,12 @@ type WebhookSignatureMiddleware struct {
 // The signature is generated using HMAC-SHA256 with the provided secret
 func (m *WebhookSignatureMiddleware) VerifySignature() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// An empty secret would make every HMAC forgeable, so fail closed.
+		if m.Secret == "" {
+			logrus.Error("unplugged.webhook-secret is not configured; rejecting webhook")
+			c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{"error": "Webhook not configured"})
+			return
+		}
 		// Get the signature from the header
 		signature := c.GetHeader("X-Webhook-Signature")
 		if signature == "" {
@@ -49,11 +55,8 @@ func (m *WebhookSignatureMiddleware) VerifySignature() gin.HandlerFunc {
 			return
 		}
 
-		if signature != expectedSignature {
-			logrus.WithFields(logrus.Fields{
-				"expected": expectedSignature,
-				"received": signature,
-			}).Error("Invalid webhook signature")
+		if !hmac.Equal([]byte(signature), []byte(expectedSignature)) {
+			logrus.Error("Invalid webhook signature")
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Invalid signature"})
 			return
 		}
@@ -65,8 +68,6 @@ func (m *WebhookSignatureMiddleware) VerifySignature() gin.HandlerFunc {
 
 // generateSignature generates a signature for the given payload using HMAC-SHA256
 func generateSignature(payload, secret string) (string, error) {
-	//TODO Remove secret from here
-	logrus.Infof("Generating signature for payload: %s, secret %s", payload, secret)
 	h := hmac.New(sha256.New, []byte(secret))
 	_, err := h.Write([]byte(payload))
 	if err != nil {
