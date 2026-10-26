@@ -42,7 +42,7 @@ func NewPlayStoreController(
 ) *PlayStoreController {
 	playStoreClient, err := newPlayStoreClient()
 	if err != nil {
-		log.Fatal(err)
+		log.Error(err) // UP: no Play Store credentials; must not abort startup
 	}
 	// Callers assume the client is configured outside local and test environments.
 

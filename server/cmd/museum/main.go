@@ -118,6 +118,7 @@ func main() {
 	viper.SetDefault("apps.cast", "https://cast.ente.com")
 	viper.SetDefault("apps.family", "https://family.ente.io")
 	viper.SetDefault("apps.space", "https://ente.space")
+	upSetDefaults() // UP
 
 	setupLogger(environment)
 	log.Infof("Booting up %s server with commit #%s", environment, os.Getenv("GIT_COMMIT"))
@@ -539,8 +540,8 @@ func main() {
 			},
 		}),
 		cors(), rateLimiter.GlobalRateLimiter(),
-		middleware.LimitRequestBody(), middleware.Logger(urlSanitizer), cacheHeaders(),
-		gzip.Gzip(gzip.DefaultCompression), middleware.PanicRecover())
+		middleware.LimitRequestBody(), middleware.UPLogger(urlSanitizer), cacheHeaders(), // UP: UPLogger
+		gzip.Gzip(gzip.DefaultCompression), middleware.PanicRecover(), middleware.UPSecurityAudit()) // UP: UPSecurityAudit
 
 	publicAPI := server.Group("/")
 	publicAPI.Use(rateLimiter.APIRateLimitMiddleware(urlSanitizer))
@@ -691,8 +692,11 @@ func main() {
 		UserController:      userController,
 		EmergencyController: emergencyCtrl,
 	}
+	up := newUPServer(userRepo, billingRepo, usageRepo, fileRepo, commonBillController, // UP
+		userController, emergencyCtrl, discordController, hashingKeyBytes)
+	up.registerRoutes(server, publicAPI, rateLimiter, authMiddleware) // UP
 	publicAPI.POST("/users/ott", userHandler.SendOTT)
-	publicAPI.POST("/users/verify-email", userHandler.VerifyEmail)
+	publicAPI.POST("/users/verify-email", up.UserHandler.VerifyEmail) // UP
 	publicAPI.POST("/users/two-factor/verify", userHandler.VerifyTwoFactor)
 	publicAPI.GET("/users/two-factor/recover", userHandler.RecoverTwoFactor)
 	publicAPI.POST("/users/two-factor/remove", userHandler.RemoveTwoFactor)
@@ -710,7 +714,7 @@ func main() {
 	privateAPI.POST("/users/srp/setup", userHandler.SetupSRP)
 	privateAPI.POST("/users/srp/complete", userHandler.CompleteSRPSetup)
 	privateAPI.POST("/users/srp/update", userHandler.UpdateSrpAndKeyAttributes)
-	publicAPI.GET("/users/srp/attributes", userHandler.GetSRPAttributes)
+	publicAPI.GET("/users/srp/attributes", up.UserHandler.GetSRPAttributes) // UP
 	publicAPI.POST("/users/srp/verify-session", userHandler.VerifySRPSession)
 	publicAPI.POST("/users/srp/create-session", userHandler.CreateSRPSession)
 	privateAPI.PUT("/users/recovery-key", userHandler.SetRecoveryKey)
@@ -725,7 +729,7 @@ func main() {
 	privateAPI.GET("/users/details/v2", userHandler.GetDetailsV2)
 	privateAPI.GET("/users/deletion-summary", userHandler.GetAccountDeletionSummary)
 	storageAPI.GET("/users/locker-usage", userHandler.GetLockerUsage)
-	privateAPI.POST("/users/change-email", userHandler.ChangeEmail)
+	privateAPI.POST("/users/change-email", up.UserHandler.ChangeEmail) // UP
 	privateAPI.GET("/users/sessions", userHandler.GetActiveSessions)
 	privateAPI.DELETE("/users/session", userHandler.TerminateSession)
 	privateAPI.GET("/users/delete-challenge", userHandler.GetDeleteChallenge)
@@ -1174,7 +1178,7 @@ func setupLogger(environment string) {
 		return funcName, fmt.Sprintf("%s:%d", path.Base(f.File), f.Line)
 	}
 	logFile := viper.GetString("log-file")
-	if environment == "local" && logFile == "" {
+	if logFile == "" { // UP: console logs in every environment unless log-file is set
 		log.SetFormatter(&log.TextFormatter{
 			CallerPrettyfier: callerPrettyfier,
 			DisableQuote:     true,

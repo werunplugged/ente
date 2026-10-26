@@ -9,3 +9,7 @@ config/.env
 /main
 /museum
 credentials/
+# UP
+Dockerfile.debug
+compose-debug.yaml
+configurations

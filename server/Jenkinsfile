@@ -1,0 +1,48 @@
+pipeline {
+    agent {
+        kubernetes {
+          label 'k8s-dev'
+          defaultContainer 'agent'
+        }
+      }
+    options {
+        ansiColor('xterm')
+        disableConcurrentBuilds(abortPrevious: false)
+        timestamps()
+    }
+    environment {
+        REPO = sh(script: 'echo $GIT_URL | awk -F/ \'{print $NF}\' | sed -e "s/.git$//"', returnStdout: true).trim()
+        GIT_ORG = sh(script: 'echo $GIT_URL | awk -F/ \'{print $4}\'', returnStdout: true).trim()
+        IMAGE_URL = "ghcr.io/${env.GIT_ORG}/${env.REPO}:${env.BRANCH_NAME}-${env.GIT_COMMIT}"
+    }
+    stages {
+        stage('Docker') {
+            steps {
+                withFolderProperties {
+                        sh "docker build  --no-cache -t ${IMAGE_URL} -f server/Dockerfile server/"
+                    withCredentials([usernamePassword(credentialsId: 'github_registry', usernameVariable: 'DOCKER_USERNAME', passwordVariable: 'DOCKER_PASSWORD')]) {
+                        sh "docker login ghcr.io -u ${DOCKER_USERNAME} -p ${DOCKER_PASSWORD}"
+                        sh "docker push ${IMAGE_URL}"
+                    }
+                    script {
+                        echo "${env.IMAGE_URL}"
+                        currentBuild.description = "Image URL: ${IMAGE_URL}\n"
+                    }
+                }
+            }
+        }
+        stage('Deploy') {
+            steps {
+                echo "deploying image ${IMAGE_URL}"
+                build job: '/Build/service_installer', parameters: [validatingString(name: 'IMAGE_URL', value: "${IMAGE_URL}")]
+            }
+        }
+    }
+
+     post {
+        always {
+            sh "docker rmi ${IMAGE_URL} || true"
+            cleanWs()
+        }
+    }
+}

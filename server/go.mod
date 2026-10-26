@@ -20,6 +20,7 @@ require (
 	github.com/gin-gonic/gin v1.9.1
 	github.com/go-playground/validator/v10 v10.14.0
 	github.com/golang-jwt/jwt/v4 v4.5.2
+	github.com/golang-jwt/jwt/v5 v5.2.2
 	github.com/golang-migrate/migrate/v4 v4.12.2
 	github.com/google/uuid v1.6.0
 	github.com/lib/pq v1.8.0
@@ -59,7 +60,6 @@ require (
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-webauthn/x v0.1.9 // indirect
 	github.com/goccy/go-json v0.10.2 // indirect
-	github.com/golang-jwt/jwt/v5 v5.2.2 // indirect
 	github.com/google/go-tpm v0.9.0 // indirect
 	github.com/google/s2a-go v0.1.9 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.11 // indirect

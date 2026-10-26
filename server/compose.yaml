@@ -40,6 +40,8 @@ services:
       start_interval: 1s
     volumes:
       - postgres-data:/var/lib/postgresql/data
+    ports: # UP: expose Postgres for local debugging
+      - 5432:5432
 
   minio:
     image: pgsty/silo
