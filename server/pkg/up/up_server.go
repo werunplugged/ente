@@ -1,7 +1,7 @@
-package main
-
-// Unplugged (UP) wiring. Kept out of main.go so that upstream museum files
-// carry only one-line call-outs, each marked with a "UP" comment.
+// Package up wires the Unplugged (UP) layer into museum. It lives outside
+// cmd/museum so that main.go, which is built as a single file, needs only
+// one-line call-outs, each marked with a "UP" comment.
+package up
 
 import (
 	"time"
@@ -22,21 +22,21 @@ import (
 	"github.com/spf13/viper"
 )
 
-func upSetDefaults() {
+func SetDefaults() {
 	viper.SetDefault("unplugged.api-host", "https://up-app-dev.unpluggedsystems.app")
 	viper.SetDefault("unplugged.inner-api-host", "https://up-app-dev.unpluggedsystems.app")
 	viper.SetDefault("unplugged.email-host", "msg.unpluggedsystems.app")
 	viper.SetDefault("unplugged.basic-plane-id", "free")
 }
 
-type upServer struct {
+type Server struct {
 	UserHandler           *api.UPUserHandler
 	adminHandler          *api.UPAdminHandler
 	webhookHandler        *api.UPWebhookHandler
 	accessTokenMiddleware *middleware.UPAccessTokenMiddleware
 }
 
-func newUPServer(
+func NewServer(
 	userRepo *repo.UserRepository,
 	billingRepo *repo.BillingRepository,
 	usageRepo *repo.UsageRepository,
@@ -46,7 +46,7 @@ func newUPServer(
 	emergencyCtrl *emergency.Controller,
 	discordController *discord.DiscordController,
 	hashingKeyBytes []byte,
-) *upServer {
+) *Server {
 	jwtValidator, err := auth.NewJWTValidator()
 	if err != nil {
 		log.Fatalf("Failed to initialize JWT validator: %v", err)
@@ -63,7 +63,7 @@ func newUPServer(
 	)
 	upBillingController.CommonBillCtrl = commonBillController
 
-	return &upServer{
+	return &Server{
 		UserHandler: &api.UPUserHandler{
 			UserController:      userController,
 			JWTValidator:        jwtValidator,
@@ -89,14 +89,15 @@ func newUPServer(
 	}
 }
 
-// registerRoutes registers the UP-only endpoints. Upstream endpoints whose
+// RegisterRoutes registers the UP-only endpoints. Upstream endpoints whose
 // behaviour UP overrides are re-pointed at s.UserHandler in main.go instead,
 // since gin does not allow registering the same route twice.
-func (s *upServer) registerRoutes(
+func (s *Server) RegisterRoutes(
 	server *gin.Engine,
 	publicAPI *gin.RouterGroup,
 	rateLimiter *middleware.RateLimitMiddleware,
 	authMiddleware middleware.AuthMiddleware,
+	urlSanitizer func(_ *gin.Context) string,
 ) {
 	upPrivateAPI := server.Group("/")
 	upPrivateAPI.Use(s.accessTokenMiddleware.UPAccessTokenAuthMiddleware(), rateLimiter.APIRateLimitForUserMiddleware(urlSanitizer))

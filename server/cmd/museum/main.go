@@ -70,6 +70,7 @@ import (
 	socialrepo "github.com/ente/museum/pkg/repo/social"
 	storageBonusRepo "github.com/ente/museum/pkg/repo/storagebonus"
 	userEntityRepo "github.com/ente/museum/pkg/repo/userentity"
+	"github.com/ente/museum/pkg/up" // UP
 	"github.com/ente/museum/pkg/utils/billing"
 	"github.com/ente/museum/pkg/utils/config"
 	"github.com/ente/museum/pkg/utils/s3config"
@@ -118,7 +119,7 @@ func main() {
 	viper.SetDefault("apps.cast", "https://cast.ente.com")
 	viper.SetDefault("apps.family", "https://family.ente.io")
 	viper.SetDefault("apps.space", "https://ente.space")
-	upSetDefaults() // UP
+	up.SetDefaults() // UP
 
 	setupLogger(environment)
 	log.Infof("Booting up %s server with commit #%s", environment, os.Getenv("GIT_COMMIT"))
@@ -692,11 +693,11 @@ func main() {
 		UserController:      userController,
 		EmergencyController: emergencyCtrl,
 	}
-	up := newUPServer(userRepo, billingRepo, usageRepo, fileRepo, commonBillController, // UP
+	upServer := up.NewServer(userRepo, billingRepo, usageRepo, fileRepo, commonBillController, // UP
 		userController, emergencyCtrl, discordController, hashingKeyBytes)
-	up.registerRoutes(server, publicAPI, rateLimiter, authMiddleware) // UP
+	upServer.RegisterRoutes(server, publicAPI, rateLimiter, authMiddleware, urlSanitizer) // UP
 	publicAPI.POST("/users/ott", userHandler.SendOTT)
-	publicAPI.POST("/users/verify-email", up.UserHandler.VerifyEmail) // UP
+	publicAPI.POST("/users/verify-email", upServer.UserHandler.VerifyEmail) // UP
 	publicAPI.POST("/users/two-factor/verify", userHandler.VerifyTwoFactor)
 	publicAPI.GET("/users/two-factor/recover", userHandler.RecoverTwoFactor)
 	publicAPI.POST("/users/two-factor/remove", userHandler.RemoveTwoFactor)
@@ -714,7 +715,7 @@ func main() {
 	privateAPI.POST("/users/srp/setup", userHandler.SetupSRP)
 	privateAPI.POST("/users/srp/complete", userHandler.CompleteSRPSetup)
 	privateAPI.POST("/users/srp/update", userHandler.UpdateSrpAndKeyAttributes)
-	publicAPI.GET("/users/srp/attributes", up.UserHandler.GetSRPAttributes) // UP
+	publicAPI.GET("/users/srp/attributes", upServer.UserHandler.GetSRPAttributes) // UP
 	publicAPI.POST("/users/srp/verify-session", userHandler.VerifySRPSession)
 	publicAPI.POST("/users/srp/create-session", userHandler.CreateSRPSession)
 	privateAPI.PUT("/users/recovery-key", userHandler.SetRecoveryKey)
@@ -729,7 +730,7 @@ func main() {
 	privateAPI.GET("/users/details/v2", userHandler.GetDetailsV2)
 	privateAPI.GET("/users/deletion-summary", userHandler.GetAccountDeletionSummary)
 	storageAPI.GET("/users/locker-usage", userHandler.GetLockerUsage)
-	privateAPI.POST("/users/change-email", up.UserHandler.ChangeEmail) // UP
+	privateAPI.POST("/users/change-email", upServer.UserHandler.ChangeEmail) // UP
 	privateAPI.GET("/users/sessions", userHandler.GetActiveSessions)
 	privateAPI.DELETE("/users/session", userHandler.TerminateSession)
 	privateAPI.GET("/users/delete-challenge", userHandler.GetDeleteChallenge)
