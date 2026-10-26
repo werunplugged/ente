@@ -94,6 +94,7 @@ class Configuration {
         iOptions: IOSOptions(
           accessibility: KeychainAccessibility.first_unlock_this_device,
         ),
+        aOptions: kSecureStorageAndroidOptions,
       );
       _documentsDirectory = (await getApplicationDocumentsDirectory()).path;
       _tempDocumentsDirPath = _documentsDirectory + "/temp/";
@@ -143,9 +144,14 @@ class Configuration {
        */
       if (e is PlatformException) {
         final PlatformException error = e;
+        // AES-GCM reports a failed integrity check as AEADBadTagException,
+        // whose name does not contain "BadPaddingException", so match it too.
+        bool indicatesUndecryptableValue(String s) =>
+            s.contains('BadPaddingException') ||
+            s.contains('AEADBadTagException');
         final bool isBadPaddingError =
-            error.toString().contains('BadPaddingException') ||
-                (error.message ?? '').contains('BadPaddingException');
+            indicatesUndecryptableValue(error.toString()) ||
+                indicatesUndecryptableValue(error.message ?? '');
         if (isBadPaddingError) {
           await logout(autoLogout: true);
           return;
