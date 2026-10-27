@@ -129,6 +129,7 @@ dependencies:
   media_extension:
     git:
       url: "https://github.com/ente-io/media_extension.git"
+      ref: "7dfca297926ad113780e8151d58262bf5f8c8e9c"
   media_kit:
   media_kit_libs_ios_video:
   media_kit_libs_video:
