@@ -4,7 +4,9 @@ import (
 	"crypto/rsa"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
+	"time"
 
 	"github.com/ente/museum/ente"
 	"github.com/ente/stacktrace"
@@ -15,11 +17,15 @@ import (
 // JWTValidator is responsible for validating JWT tokens
 type JWTValidator struct {
 	publicKeys []*rsa.PublicKey
+	issuers    []string
+	audiences  []string
+	parser     *jwt.Parser
 }
 
 // JWTClaims represents the claims in a JWT token
 type JWTClaims struct {
 	PreferredUsername string `json:"preferred_username,omitempty"`
+	AuthorizedParty   string `json:"azp,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -46,9 +52,56 @@ func NewJWTValidator() (*JWTValidator, error) {
 		publicKeys = append(publicKeys, publicKey)
 	}
 
+	// Without these, any token signed by a trusted key would be accepted,
+	// whichever client it was issued for, so refuse to start.
+	issuers := nonEmpty(viper.GetStringSlice("jwt.issuers"))
+	if len(issuers) == 0 {
+		return nil, stacktrace.Propagate(fmt.Errorf("jwt.issuers is not configured"), "")
+	}
+	audiences := nonEmpty(viper.GetStringSlice("jwt.audiences"))
+	if len(audiences) == 0 {
+		return nil, stacktrace.Propagate(fmt.Errorf("jwt.audiences is not configured"), "")
+	}
+
 	return &JWTValidator{
 		publicKeys: publicKeys,
+		issuers:    issuers,
+		audiences:  audiences,
+		parser: jwt.NewParser(
+			jwt.WithValidMethods([]string{"RS256"}),
+			jwt.WithExpirationRequired(),
+			jwt.WithIssuedAt(),
+			jwt.WithLeeway(30*time.Second),
+		),
 	}, nil
+}
+
+func nonEmpty(values []string) []string {
+	var result []string
+	for _, v := range values {
+		if v = strings.TrimSpace(v); v != "" {
+			result = append(result, v)
+		}
+	}
+	return result
+}
+
+// checkIssuerAndAudience requires a configured issuer, and a configured
+// audience in either aud or azp (Keycloak access tokens name the client in
+// azp and often carry only "account" in aud).
+func (v *JWTValidator) checkIssuerAndAudience(claims *JWTClaims) error {
+	if !slices.Contains(v.issuers, claims.Issuer) {
+		return fmt.Errorf("unexpected issuer %q", claims.Issuer)
+	}
+	if slices.Contains(v.audiences, claims.AuthorizedParty) {
+		return nil
+	}
+	for _, aud := range claims.Audience {
+		if slices.Contains(v.audiences, aud) {
+			return nil
+		}
+	}
+	return fmt.Errorf("token not issued for an allowed audience")
 }
 
 // ValidateToken validates a JWT token and returns the claims
@@ -59,7 +112,7 @@ func (v *JWTValidator) ValidateToken(tokenString string) (*JWTClaims, error) {
 	var lastErr error
 	// Try validation with each public key
 	for _, publicKey := range v.publicKeys {
-		token, err := jwt.ParseWithClaims(tokenString, &JWTClaims{}, func(token *jwt.Token) (interface{}, error) {
+		token, err := v.parser.ParseWithClaims(tokenString, &JWTClaims{}, func(token *jwt.Token) (interface{}, error) {
 			// Validate the signing method
 			if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
 				return nil, stacktrace.Propagate(fmt.Errorf("unexpected signing method: %v", token.Header["alg"]), "")
@@ -83,6 +136,11 @@ func (v *JWTValidator) ValidateToken(tokenString string) (*JWTClaims, error) {
 		if !ok {
 			lastErr = fmt.Errorf("failed to extract claims")
 			continue // Try next key
+		}
+
+		// The signature matched this key, so another key won't change the outcome
+		if err := v.checkIssuerAndAudience(claims); err != nil {
+			return nil, stacktrace.Propagate(err, "JWT validation failed")
 		}
 
 		// Successfully validated with key at index i
