@@ -26,7 +26,7 @@ func SetDefaults() {
 	viper.SetDefault("unplugged.api-host", "https://up-app-dev.unpluggedsystems.app")
 	viper.SetDefault("unplugged.inner-api-host", "https://up-app-dev.unpluggedsystems.app")
 	viper.SetDefault("unplugged.email-host", "msg.unpluggedsystems.app")
-	viper.SetDefault("unplugged.basic-plane-id", "free")
+	viper.SetDefault("unplugged.basic-plan-id", "free")
 }
 
 type Server struct {

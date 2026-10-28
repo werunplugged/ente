@@ -54,6 +54,10 @@ func (h *UPAdminHandler) UPDeleteUser(context *gin.Context) {
 		return
 	}
 	userID, username, err := h.UserUtils.GetUserID(username)
+	if err != nil {
+		handler.Error(context, stacktrace.Propagate(err, "failed to resolve user to delete"))
+		return
+	}
 
 	adminID := auth.GetUserID(context.Request.Header)
 	logger := logrus.WithFields(logrus.Fields{

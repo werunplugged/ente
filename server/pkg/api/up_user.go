@@ -150,7 +150,7 @@ func (h *UPUserHandler) SendOTT(c *gin.Context) {
 	if len(otts) > 0 {
 		_, err := h.UserController.UserAuthRepo.RemoveOTT(usernameHash, otts[0], app)
 		if err != nil {
-
+			handler.Error(c, stacktrace.Propagate(err, "failed to remove previous OTT"))
 			return
 		}
 	}
