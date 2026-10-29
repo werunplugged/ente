@@ -1,5 +1,3 @@
-import "dart:io";
-
 import 'package:flutter/material.dart';
 import 'package:photos/core/configuration.dart';
 import "package:photos/generated/l10n.dart";
@@ -154,39 +152,40 @@ class BackupSettingsScreen extends StatelessWidget {
                           ],
                         ),
                         const SizedBox(height: 24),
-                        Platform.isIOS
-                            ? Column(
-                                children: [
-                                  MenuItemWidget(
-                                    captionedTextWidget: CaptionedTextWidget(
-                                      title: AppLocalizations.of(context)
-                                          .disableAutoLock,
-                                    ),
-                                    menuItemColor: colorScheme.fillFaint,
-                                    trailingWidget: ToggleSwitchWidget(
-                                      value: () => EnteWakeLockService.instance
-                                          .shouldKeepAppAwakeAcrossSessions,
-                                      onChanged: () async {
-                                        EnteWakeLockService.instance
-                                            .updateWakeLock(
-                                          enable: !EnteWakeLockService.instance
-                                              .shouldKeepAppAwakeAcrossSessions,
-                                          wakeLockFor: WakeLockFor
-                                              .fasterBackupsOniOSByKeepingScreenAwake,
-                                        );
-                                      },
-                                    ),
-                                    singleBorderRadius: 8,
-                                    alignCaptionedTextToLeft: true,
-                                    isGestureDetectorDisabled: true,
-                                  ),
-                                  MenuSectionDescriptionWidget(
-                                    content: AppLocalizations.of(context)
-                                        .deviceLockExplanation,
-                                  ),
-                                ],
-                              )
-                            : const SizedBox.shrink(),
+                        // UNP-8490: shown on all platforms like upstream —
+                        // keeping the device awake during large backups
+                        // prevents suspended uploads and background-worker
+                        // races that cause failed or double-counted uploads.
+                        Column(
+                          children: [
+                            MenuItemWidget(
+                              captionedTextWidget: CaptionedTextWidget(
+                                title: AppLocalizations.of(context)
+                                    .disableAutoLock,
+                              ),
+                              menuItemColor: colorScheme.fillFaint,
+                              trailingWidget: ToggleSwitchWidget(
+                                value: () => EnteWakeLockService
+                                    .instance.shouldKeepAppAwakeAcrossSessions,
+                                onChanged: () async {
+                                  EnteWakeLockService.instance.updateWakeLock(
+                                    enable: !EnteWakeLockService.instance
+                                        .shouldKeepAppAwakeAcrossSessions,
+                                    wakeLockFor: WakeLockFor
+                                        .fasterBackupsOniOSByKeepingScreenAwake,
+                                  );
+                                },
+                              ),
+                              singleBorderRadius: 8,
+                              alignCaptionedTextToLeft: true,
+                              isGestureDetectorDisabled: true,
+                            ),
+                            MenuSectionDescriptionWidget(
+                              content: AppLocalizations.of(context)
+                                  .deviceLockExplanation,
+                            ),
+                          ],
+                        ),
                       ],
                     ),
                   ),

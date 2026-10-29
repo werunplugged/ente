@@ -158,6 +158,20 @@ Future<void> runBackgroundTask(
   TimeLogger tlog, {
   String mode = 'normal',
 }) async {
+  // UNP-8490 (upstream parity): skip background work while the foreground
+  // engine is alive, so only one process uploads at a time. Concurrent
+  // fg/bg uploads cause lock contention, invisible progress, and duplicate
+  // registrations during large backups.
+  final isRunningInFG = await _isRunningInForeground();
+  if (isRunningInFG) {
+    _logger.info(
+      "[BG TASK] Foreground recently active, skipping background work",
+    );
+    return;
+  }
+  _logger.info(
+    "[BG TASK] No recent foreground activity, proceeding with background work",
+  );
   await _runMinimally(taskId, tlog);
 }
 
