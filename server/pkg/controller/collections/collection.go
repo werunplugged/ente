@@ -3,19 +3,21 @@ package collections
 import (
 	"context"
 	"fmt"
-	"github.com/ente-io/museum/pkg/controller"
-	"github.com/ente-io/museum/pkg/controller/access"
-	"github.com/ente-io/museum/pkg/controller/email"
-	"github.com/ente-io/museum/pkg/controller/public"
-	"github.com/ente-io/museum/pkg/repo/cast"
-	"github.com/ente-io/museum/pkg/utils/array"
-	"github.com/ente-io/museum/pkg/utils/auth"
+	"slices"
+
+	"github.com/ente/museum/pkg/controller"
+	"github.com/ente/museum/pkg/controller/access"
+	"github.com/ente/museum/pkg/controller/email"
+	"github.com/ente/museum/pkg/controller/public"
+	"github.com/ente/museum/pkg/repo/cast"
+	socialrepo "github.com/ente/museum/pkg/repo/social"
+	"github.com/ente/museum/pkg/utils/auth"
 	"github.com/gin-gonic/gin"
 
-	"github.com/ente-io/museum/ente"
-	"github.com/ente-io/museum/pkg/repo"
-	"github.com/ente-io/museum/pkg/utils/time"
-	"github.com/ente-io/stacktrace"
+	"github.com/ente/museum/ente"
+	"github.com/ente/museum/pkg/repo"
+	"github.com/ente/museum/pkg/utils/time"
+	"github.com/ente/stacktrace"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -23,41 +25,53 @@ const (
 	CollectionDiffLimit = 2500
 )
 
-// CollectionController encapsulates logic that deals with collections
-type CollectionController struct {
-	CollectionLinkCtrl *public.CollectionLinkController
-	EmailCtrl          *email.EmailNotificationController
-	AccessCtrl         access.Controller
-	BillingCtrl        *controller.BillingController
-	CollectionRepo     *repo.CollectionRepository
-	UserRepo           *repo.UserRepository
-	FileRepo           *repo.FileRepository
-	QueueRepo          *repo.QueueRepository
-	CastRepo           *cast.Repository
-	TaskRepo           *repo.TaskLockRepository
+type CollectionPushNotifier interface {
+	NotifyAlbumShare(ctx context.Context, recipients []int64)
 }
 
-// Create creates a collection
+type CollectionController struct {
+	CollectionLinkCtrl    *public.CollectionLinkController
+	EmailCtrl             *email.EmailNotificationController
+	PushCtrl              CollectionPushNotifier
+	AccessCtrl            access.Controller
+	BillingCtrl           *controller.BillingController
+	UserLookup            controller.UserLookup
+	CollectionRepo        *repo.CollectionRepository
+	UserRepo              *repo.UserRepository
+	FileRepo              *repo.FileRepository
+	QueueRepo             *repo.QueueRepository
+	TrashRepo             *repo.TrashRepository
+	CastRepo              *cast.Repository
+	TaskRepo              *repo.TaskLockRepository
+	CollectionActionsRepo *repo.CollectionActionsRepository
+	CommentsRepo          *socialrepo.CommentsRepository
+	ReactionsRepo         *socialrepo.ReactionsRepository
+}
+
 func (c *CollectionController) Create(collection ente.Collection, ownerID int64) (ente.Collection, error) {
-	// The key attribute check is to ensure that user does not end up uploading any files before actually setting the key attributes.
+	if err := validateOwnedCollectionKey(collection.EncryptedKey, collection.KeyDecryptionNonce); err != nil {
+		return ente.Collection{}, err
+	}
+	// Do not allow uploads before the user has configured key attributes.
 	if _, keyErr := c.UserRepo.GetKeyAttributes(ownerID); keyErr != nil {
 		return ente.Collection{}, stacktrace.Propagate(keyErr, "Unable to get keyAttributes")
 	}
 	collectionType := collection.Type
+	app := collection.App
 	collection.Owner.ID = ownerID
 	collection.UpdationTime = time.Microseconds()
 	// [20th Dec 2022] Patch on server side untill majority of the existing mobile clients upgrade to a version higher > 0.7.0
-	// https://github.com/ente-io/photos-app/pull/725
+	// https://github.com/ente/photos-app/pull/725
 	if collection.Type == "CollectionType.album" {
 		collection.Type = "album"
 	}
-	if !array.StringInList(collection.Type, ente.ValidCollectionTypes) {
+	if !slices.Contains(ente.ValidCollectionTypes, collection.Type) {
 		return ente.Collection{}, stacktrace.Propagate(fmt.Errorf("unexpected collection type %s", collection.Type), "")
 	}
 	collection, err := c.CollectionRepo.Create(collection)
 	if err != nil {
 		if err == ente.ErrUncategorizeCollectionAlreadyExists || err == ente.ErrFavoriteCollectionAlreadyExist {
-			dbCollection, err := c.CollectionRepo.GetCollectionByType(ownerID, collectionType)
+			dbCollection, err := c.CollectionRepo.GetCollectionByType(ownerID, collectionType, app)
 			if err != nil {
 				return ente.Collection{}, stacktrace.Propagate(err, "")
 			}
@@ -71,7 +85,6 @@ func (c *CollectionController) Create(collection ente.Collection, ownerID int64)
 	return collection, nil
 }
 
-// GetCollection returns the collection for given collectionID
 func (c *CollectionController) GetCollection(ctx *gin.Context, userID int64, cID int64) (ente.Collection, error) {
 	resp, err := c.AccessCtrl.GetCollection(ctx, &access.GetCollectionParams{
 		CollectionID:   cID,
@@ -81,7 +94,15 @@ func (c *CollectionController) GetCollection(ctx *gin.Context, userID int64, cID
 	if err != nil {
 		return ente.Collection{}, stacktrace.Propagate(err, "")
 	}
-	return resp.Collection, nil
+	collection, err := c.CollectionRepo.WithSharingDetailsForUser(resp.Collection, userID)
+	if err != nil {
+		return ente.Collection{}, stacktrace.Propagate(err, "")
+	}
+	if resp.Role != nil && *resp.Role != ente.OWNER {
+		collection.MagicMetadata = nil
+		collection.PublicURLs = ente.FilterPublicURLsForRole(collection.PublicURLs, *resp.Role)
+	}
+	return collection, nil
 }
 
 func (c *CollectionController) GetFile(ctx *gin.Context, collectionID int64, fileID int64) (*ente.File, error) {
@@ -100,9 +121,15 @@ func (c *CollectionController) GetFile(ctx *gin.Context, collectionID int64, fil
 		if err != nil {
 			return nil, stacktrace.Propagate(err, "")
 		}
-		if !array.Int64InList(collectionID, cIDs) {
+		if !slices.Contains(cIDs, collectionID) {
 			return nil, stacktrace.Propagate(ente.ErrPermissionDenied, "")
 		}
+		if file.Action != nil && (*file.Action == ente.ActionRemove || *file.Action == ente.ActionDeleteSuggested) {
+			return nil, stacktrace.Propagate(&ente.ErrFileNotFoundInAlbum, "")
+		}
+		file.MagicMetadata = nil
+		file.Action = nil
+		file.ActionUserID = nil
 	}
 	if file.IsDeleted {
 		return nil, stacktrace.Propagate(&ente.ErrFileNotFoundInAlbum, "")
@@ -110,8 +137,6 @@ func (c *CollectionController) GetFile(ctx *gin.Context, collectionID int64, fil
 	return &file, nil
 }
 
-// TrashV3 deletes a given collection and based on user input (TrashCollectionV3Request.KeepFiles as FALSE) , it will move all files present in the underlying collection
-// to trash.
 func (c *CollectionController) TrashV3(ctx *gin.Context, req ente.TrashCollectionV3Request) error {
 	if req.KeepFiles == nil {
 		return ente.ErrBadRequest
@@ -128,7 +153,7 @@ func (c *CollectionController) TrashV3(ctx *gin.Context, req ente.TrashCollectio
 		return stacktrace.Propagate(err, "")
 	}
 	if !resp.Collection.AllowDelete() {
-		return stacktrace.Propagate(ente.ErrBadRequest, fmt.Sprintf("deleting albums of type %s is not allowed", resp.Collection.Type))
+		return stacktrace.Propagate(ente.ErrBadRequest, "deleting albums of type %s is not allowed", resp.Collection.Type)
 	}
 	if resp.Collection.IsDeleted {
 		log.WithFields(log.Fields{
@@ -139,13 +164,12 @@ func (c *CollectionController) TrashV3(ctx *gin.Context, req ente.TrashCollectio
 	}
 
 	if *req.KeepFiles {
-		// Verify that all files from this particular collections have been removed.
 		count, err := c.CollectionRepo.GetCollectionsFilesCount(cID)
 		if err != nil {
 			return stacktrace.Propagate(err, "")
 		}
 		if count != 0 {
-			return stacktrace.Propagate(&ente.ErrCollectionNotEmpty, fmt.Sprintf("Collection file count %d", count))
+			return stacktrace.Propagate(&ente.ErrCollectionNotEmpty, "Collection file count %d", count)
 		}
 
 	}
@@ -157,7 +181,6 @@ func (c *CollectionController) TrashV3(ctx *gin.Context, req ente.TrashCollectio
 	if err != nil {
 		return stacktrace.Propagate(err, "failed to revoke cast token")
 	}
-	// Continue with current delete flow till. This disables sharing for this collection and then queue it up for deletion
 	err = c.CollectionRepo.ScheduleDelete(cID)
 	if err != nil {
 		return stacktrace.Propagate(err, "")
@@ -165,7 +188,6 @@ func (c *CollectionController) TrashV3(ctx *gin.Context, req ente.TrashCollectio
 	return nil
 }
 
-// Rename updates the collection's name
 func (c *CollectionController) Rename(userID int64, cID int64, encryptedName string, nameDecryptionNonce string) error {
 	if err := c.verifyOwnership(cID, userID); err != nil {
 		return stacktrace.Propagate(err, "")
@@ -177,7 +199,6 @@ func (c *CollectionController) Rename(userID int64, cID int64, encryptedName str
 	return nil
 }
 
-// UpdateMagicMetadata updates the magic metadata for given collection
 func (c *CollectionController) UpdateMagicMetadata(ctx *gin.Context, request ente.UpdateCollectionMagicMetadata, isPublicMetadata bool) error {
 	userID := auth.GetUserID(ctx.Request.Header)
 	if err := c.verifyOwnership(request.ID, userID); err != nil {
@@ -192,7 +213,7 @@ func (c *CollectionController) UpdateMagicMetadata(ctx *gin.Context, request ent
 	return nil
 }
 
-func (c *CollectionController) HandleAccountDeletion(ctx context.Context, userID int64, logger *log.Entry) error {
+func (c *CollectionController) ResetUserSharingAccess(ctx context.Context, userID int64, logger *log.Entry) error {
 	logger.Info("disabling shared collections with or by the user")
 	sharedCollections, err := c.CollectionRepo.GetAllSharedCollections(ctx, userID)
 	if err != nil {
@@ -205,6 +226,9 @@ func (c *CollectionController) HandleAccountDeletion(ctx context.Context, userID
 		if err != nil {
 			return stacktrace.Propagate(err, "")
 		}
+		if cleanupErr := c.removeUserSocialActivity(ctx, shareCollection.CollectionID, shareCollection.ToUserID); cleanupErr != nil {
+			return cleanupErr
+		}
 	}
 	err = c.CastRepo.RevokeTokenForUser(ctx, userID)
 	if err != nil {
@@ -214,7 +238,10 @@ func (c *CollectionController) HandleAccountDeletion(ctx context.Context, userID
 	return stacktrace.Propagate(err, "")
 }
 
-// Verify that user owns the collection
+func (c *CollectionController) HandleAccountDeletion(ctx context.Context, userID int64, logger *log.Entry) error {
+	return c.ResetUserSharingAccess(ctx, userID, logger)
+}
+
 func (c *CollectionController) verifyOwnership(cID int64, userID int64) error {
 	collection, err := c.CollectionRepo.Get(cID)
 	if err != nil {
@@ -222,6 +249,20 @@ func (c *CollectionController) verifyOwnership(cID int64, userID int64) error {
 	}
 	if userID != collection.Owner.ID {
 		return stacktrace.Propagate(ente.ErrPermissionDenied, "")
+	}
+	return nil
+}
+
+func (c *CollectionController) removeUserSocialActivity(ctx context.Context, collectionID int64, userID int64) error {
+	if c.CommentsRepo != nil {
+		if err := c.CommentsRepo.SoftDeleteByCollectionAndUser(ctx, collectionID, userID); err != nil {
+			return stacktrace.Propagate(err, "")
+		}
+	}
+	if c.ReactionsRepo != nil {
+		if err := c.ReactionsRepo.SoftDeleteByCollectionAndUser(ctx, collectionID, userID); err != nil {
+			return stacktrace.Propagate(err, "")
+		}
 	}
 	return nil
 }

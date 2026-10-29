@@ -250,6 +250,12 @@ jwt:
       -----BEGIN PUBLIC KEY-----
       [second public key content]
       -----END PUBLIC KEY-----
+  # Required: museum refuses to start without them. UP access tokens must have
+  # an iss from this list, and an azp or aud from the audiences list.
+  issuers:
+    - https://keycloak.example.com/auth/realms/your-realm
+  audiences:
+    - your-up-photos-client-id
 
 # SMTP configuration (optional)
 #

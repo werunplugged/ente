@@ -6,17 +6,31 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ente-io/museum/ente"
-	"github.com/ente-io/museum/pkg/utils/auth"
-	"github.com/ente-io/museum/pkg/utils/handler"
-	"github.com/ente-io/museum/pkg/utils/time"
-	"github.com/ente-io/stacktrace"
+	"github.com/ente/museum/ente"
+	"github.com/ente/museum/pkg/controller/discord"
+	"github.com/ente/museum/pkg/controller/emergency"
+	"github.com/ente/museum/pkg/controller/user"
+	"github.com/ente/museum/pkg/repo"
+	"github.com/ente/museum/pkg/utils"
+	"github.com/ente/museum/pkg/utils/auth"
+	"github.com/ente/museum/pkg/utils/handler"
+	"github.com/ente/museum/pkg/utils/time"
+	"github.com/ente/stacktrace"
 	"github.com/gin-contrib/requestid"
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
 )
 
-func (h *AdminHandler) UPGetUsers(c *gin.Context) {
+// UPAdminHandler serves the /up-admin endpoints
+type UPAdminHandler struct {
+	UserRepo            *repo.UserRepository
+	UserController      *user.UserController
+	EmergencyController *emergency.Controller
+	DiscordController   *discord.DiscordController
+	UserUtils           *utils.User
+}
+
+func (h *UPAdminHandler) UPGetUsers(c *gin.Context) {
 
 	sinceTime, err := strconv.ParseInt(c.Query("sinceTime"), 10, 64)
 	if err != nil {
@@ -31,7 +45,7 @@ func (h *AdminHandler) UPGetUsers(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"users": users})
 }
 
-func (h *AdminHandler) UPDeleteUser(context *gin.Context) {
+func (h *UPAdminHandler) UPDeleteUser(context *gin.Context) {
 	var username string
 	username = context.Query("username")
 	username = strings.TrimSpace(username)
@@ -40,6 +54,10 @@ func (h *AdminHandler) UPDeleteUser(context *gin.Context) {
 		return
 	}
 	userID, username, err := h.UserUtils.GetUserID(username)
+	if err != nil {
+		handler.Error(context, stacktrace.Propagate(err, "failed to resolve user to delete"))
+		return
+	}
 
 	adminID := auth.GetUserID(context.Request.Header)
 	logger := logrus.WithFields(logrus.Fields{

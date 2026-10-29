@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/ente-io/museum/pkg/utils"
-	"github.com/ente-io/museum/pkg/utils/auth"
+	"github.com/ente/museum/pkg/utils"
+	"github.com/ente/museum/pkg/utils/auth"
 	"github.com/gin-gonic/gin"
 	"github.com/patrickmn/go-cache"
 	"github.com/sirupsen/logrus"

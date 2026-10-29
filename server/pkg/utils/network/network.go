@@ -6,11 +6,7 @@ import (
 )
 
 func GetClientIP(c *gin.Context) string {
-	ip := c.GetHeader("CF-Connecting-IP")
-	if ip == "" {
-		ip = c.ClientIP()
-	}
-	return ip
+	return c.ClientIP()
 }
 
 func IsCFWorkerIP(ip string) bool {
@@ -35,7 +31,6 @@ func GetPrettyUA(ua string) string {
 	return parsedUA.UserAgent.Family + ", " + parsedUA.Os.ToString()
 }
 
-// GetClientInfo returns the client package and version from the request headers
 func GetClientInfo(gin *gin.Context) string {
 	client := gin.GetHeader("X-Client-Package")
 	version := gin.GetHeader("X-Client-Version")

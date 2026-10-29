@@ -3,18 +3,17 @@ package controller
 import (
 	"database/sql"
 	"errors"
-	"fmt"
 	"strconv"
 
-	"github.com/ente-io/museum/pkg/controller/commonbilling"
-	"github.com/ente-io/museum/pkg/utils"
-	"github.com/ente-io/museum/pkg/utils/billing"
+	"github.com/ente/museum/pkg/controller/commonbilling"
+	"github.com/ente/museum/pkg/utils"
+	"github.com/ente/museum/pkg/utils/billing"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 
-	"github.com/ente-io/museum/ente"
-	"github.com/ente-io/museum/pkg/repo"
-	"github.com/ente-io/stacktrace"
+	"github.com/ente/museum/ente"
+	"github.com/ente/museum/pkg/repo"
+	"github.com/ente/stacktrace"
 )
 
 const (
@@ -55,6 +54,12 @@ func NewUPBillingController(
 	}
 }
 
+// upIsUnpluggedPlan reports whether plan is the plan of an Unplugged
+// subscription; UP stores the plan's Stripe price ID as the product ID.
+func upIsUnpluggedPlan(s ente.Subscription, plan ente.BillingPlan) bool {
+	return s.PaymentProvider == ente.Unplugged && s.ProductID == plan.StripeID
+}
+
 func (c *BillingController) UPHandleAccountDeletion(userID int64, logger *log.Entry) (isCancelled bool, err error) {
 	logger.Info("updating billing on account deletion")
 	subscription, err := c.BillingRepo.GetUserSubscription(userID)
@@ -80,7 +85,7 @@ func (c *BillingController) UPHandleAccountDeletion(userID int64, logger *log.En
 	// Cancelation of these accounts will require manual intervention. Ideally,
 	// we should never be deleting such accounts.
 	if subscription.ProductID == ente.FamilyPlanProductID || subscription.ProductID == "" {
-		return false, stacktrace.NewError(fmt.Sprintf("unexpected product id %s", subscription.ProductID), "")
+		return false, stacktrace.NewError("unexpected product id %s", subscription.ProductID)
 	}
 	// delete customer data from Stripe if user is on paid plan.
 	logger.Info("Updating originalTransactionID for UNPLUGGED provider")
@@ -177,7 +182,7 @@ func (c *UPBillingController) UPVerifySubscription(
 				}).Error("Subscription for given transactionID is attached with different user")
 				log.Info("Subscription attached to different user")
 				return ente.Subscription{}, stacktrace.Propagate(&ente.ErrSubscriptionAlreadyClaimed,
-					fmt.Sprintf("Subscription with txn id %s already associated with user %d", newSubscription.OriginalTransactionID, existingSub.UserID))
+					"Subscription with txn id %s already associated with user %d", newSubscription.OriginalTransactionID, existingSub.UserID)
 			}
 		}
 	}
