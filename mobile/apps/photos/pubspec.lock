@@ -1515,8 +1515,8 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: HEAD
-      resolved-ref: "23a38887fa6b61330452555f8e686c3a3a1c91a2"
+      ref: "7dfca297926ad113780e8151d58262bf5f8c8e9c"
+      resolved-ref: "7dfca297926ad113780e8151d58262bf5f8c8e9c"
       url: "https://github.com/ente-io/media_extension.git"
     source: git
     version: "1.0.2"
