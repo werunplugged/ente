@@ -6,6 +6,7 @@ import "package:ente_feature_flag/ente_feature_flag.dart";
 import "package:flutter/foundation.dart";
 import "package:logging/logging.dart";
 import "package:photos/core/constants.dart";
+import "package:photos/core/errors.dart";
 import "package:photos/db/upload_locks_db.dart";
 import "package:photos/module/upload/model/multipart.dart";
 import "package:photos/module/upload/model/xml.dart";
@@ -13,6 +14,8 @@ import "package:photos/service_locator.dart";
 import "package:photos/services/collections_service.dart";
 
 class MultiPartUploader {
+  static const _maximumPartUploadAttempts = 3;
+
   final Dio _enteDio;
   final Dio _s3Dio;
   final UploadLocksDB _db;
@@ -222,13 +225,26 @@ class MultiPartUploader {
         "File size mismatch. Expected ${partInfo.encFileSize} but got $encFileLength",
       );
     }
+    // Ensure the number of URLs matches what we expect from the part size
+    final expectedCount = (encFileLength / partSize).ceil();
+    if (partsLength != expectedCount) {
+      _logger.severe(
+        'Multipart parts mismatch for key ${partInfo.urls.objectKey}. '
+        'Expected $expectedCount parts (encFileLength=$encFileLength, partSize=$partSize) '
+        'but got $partsLength',
+      );
+      throw MultiPartError('multipart url count mismatch');
+    }
     // Start parts upload
     int count = 0;
     while (i < partsLength) {
       count++;
       final partURL = partsURLs[i];
       final isLastPart = i == partsLength - 1;
-      final fileSize = isLastPart ? encFileLength % partSize : partSize;
+      // UNP-8490: last part must be the remainder from the part offset, not
+      // encFileLength % partSize, which is 0 when the file size is an exact
+      // multiple of the part size (upstream fix c00b3172b3).
+      final fileSize = isLastPart ? encFileLength - (i * partSize) : partSize;
       _logger.info(
         "Uploading part ${i + 1} / $partsLength of size $fileSize bytes (total size $encFileLength).",
       );
@@ -237,19 +253,45 @@ class MultiPartUploader {
           'Forced exception to test multipart upload retry mechanism.',
         );
       }
-      final response = await _s3Dio.put(
-        partURL,
-        data: encryptedFile.openRead(
-          i * partSize,
-          isLastPart ? null : (i + 1) * partSize,
-        ),
-        options: Options(
-          headers: {
-            Headers.contentLengthHeader: fileSize,
-            Headers.contentTypeHeader: "application/octet-stream",
-          },
-        ),
-      );
+      // UNP-8490: retry a failed part PUT immediately (upstream fix
+      // 3fa6c638ce, widened to also cover dropped connections such as
+      // broken pipes) instead of failing the whole upload and waiting for
+      // the next sync cycle. Re-putting the same part is idempotent.
+      late final Response<dynamic> response;
+      for (var attempt = 1;; attempt++) {
+        try {
+          response = await _s3Dio.put(
+            partURL,
+            data: encryptedFile.openRead(
+              i * partSize,
+              isLastPart ? null : (i + 1) * partSize,
+            ),
+            options: Options(
+              headers: {
+                Headers.contentLengthHeader: fileSize,
+                Headers.contentTypeHeader: "application/octet-stream",
+              },
+            ),
+          );
+          break;
+        } on DioException catch (error) {
+          final isRetryableStatus = error.response?.statusCode == 520;
+          final isConnectionError =
+              error.type == DioExceptionType.connectionError ||
+                  error.type == DioExceptionType.connectionTimeout ||
+                  error.type == DioExceptionType.sendTimeout ||
+                  error.error is SocketException;
+          if ((!isRetryableStatus && !isConnectionError) ||
+              attempt >= _maximumPartUploadAttempts) {
+            rethrow;
+          }
+          _logger.info(
+            "Part ${i + 1} PUT failed (${error.type}, "
+            "status: ${error.response?.statusCode}); retrying "
+            "(${attempt + 1}/$_maximumPartUploadAttempts)",
+          );
+        }
+      }
 
       final eTag = response.headers.value("etag");
 

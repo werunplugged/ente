@@ -35,7 +35,8 @@ class NotificationService {
     ) onNotificationTapped,
   ) async {
     await initTimezones();
-    const androidSettings = AndroidInitializationSettings('notification_icon');
+    const androidSettings =
+        AndroidInitializationSettings('gallery_notification_icon');
     const iosSettings = DarwinInitializationSettings(
       requestAlertPermission: false,
       requestSoundPermission: false,
