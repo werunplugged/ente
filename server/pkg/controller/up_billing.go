@@ -114,7 +114,7 @@ func (c *UPBillingController) UPVerifySubscription(
 
 	currentEnteSubscription, errEnteSub := c.BillingRepo.GetUserSubscription(userID)
 	if errEnteSub != nil {
-		return ente.Subscription{}, stacktrace.Propagate(err, "")
+		return ente.Subscription{}, stacktrace.Propagate(errEnteSub, "")
 	}
 	log.Infof("Current subscription details currenSubscription.Type: %s", currentEnteSubscription.ProductID)
 
@@ -242,8 +242,11 @@ func (c *UPBillingController) handleSubscriptionUpdated(reqBody *ente.WebhookReq
 
 	// Get username from webhook request
 	username := reqBody.Username
-	userID, username, err := c.UserUtils.GetUserID(username)
 	log.Infof("reqBody.Username: %s", username)
+	userID, _, err := c.UserUtils.GetUserID(username)
+	if err != nil {
+		return stacktrace.Propagate(err, "failed to resolve webhook username")
+	}
 
 	// Verify and update the subscription for the user
 	_, err = c.UPVerifySubscription(userID)

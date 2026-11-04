@@ -693,9 +693,9 @@ func main() {
 		UserController:      userController,
 		EmergencyController: emergencyCtrl,
 	}
-	upServer := up.NewServer(userRepo, billingRepo, usageRepo, fileRepo, commonBillController, // UP
+	upServer := up.NewServer(userRepo, billingRepo, usageRepo, commonBillController, // UP
 		userController, emergencyCtrl, discordController, hashingKeyBytes)
-	upServer.RegisterRoutes(server, publicAPI, rateLimiter, authMiddleware, urlSanitizer) // UP
+	upServer.RegisterRoutes(server, publicAPI, rateLimiter, urlSanitizer) // UP
 	publicAPI.POST("/users/ott", userHandler.SendOTT)
 	publicAPI.POST("/users/verify-email", upServer.UserHandler.VerifyEmail) // UP
 	publicAPI.POST("/users/two-factor/verify", userHandler.VerifyTwoFactor)

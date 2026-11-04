@@ -4,72 +4,46 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strings"
+	"net/url"
 	"time"
 
 	"github.com/ente/museum/ente"
-	"github.com/ente/museum/pkg/controller/commonbilling"
 	"github.com/ente/museum/pkg/repo"
+	"github.com/ente/museum/pkg/utils"
 	"github.com/ente/stacktrace"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 )
 
+// UPStoreController reads a user's current subscription from the UP inner API.
 type UPStoreController struct {
-	BillingRepo            *repo.BillingRepository
-	FileRepo               *repo.FileRepository
-	UserRepo               *repo.UserRepository
-	BillingPlansPerCountry ente.BillingPlansPerCountry
-	CommonBillCtrl         *commonbilling.Controller
+	UserRepo   *repo.UserRepository
+	httpClient *http.Client
 }
 
-// Return a new instance of UPStoreController
-func NewUPStoreController(
-	billingRepo *repo.BillingRepository,
-	fileRepo *repo.FileRepository,
-	userRepo *repo.UserRepository,
-	commonBillCtrl *commonbilling.Controller,
-) *UPStoreController {
-
+func NewUPStoreController(userRepo *repo.UserRepository) *UPStoreController {
 	return &UPStoreController{
-		BillingRepo:    billingRepo,
-		FileRepo:       fileRepo,
-		UserRepo:       userRepo,
-		CommonBillCtrl: commonBillCtrl,
+		UserRepo:   userRepo,
+		httpClient: &http.Client{Timeout: 10 * time.Second},
 	}
 }
 
-// GetVerifiedSubscription verifies and returns the verified subscription
+// GetVerifiedSubscription returns the UP subscription of the UP account userID.
 func (c *UPStoreController) GetVerifiedSubscription(userID int64) (ente.UpSubscriptionDetails, error) {
-
 	user, err := c.UserRepo.Get(userID)
-	var upUsername = user.Email
-	log.Info("UP username: ", upUsername)
-	if at := strings.Index(upUsername, "@"); at != -1 {
-		upUsername = upUsername[:at]
-		log.Info("UP username: ", upUsername)
-	}
-
-	response, err := c.verifySubscriptionByUsername(upUsername)
-	log.Info("c.verifySubscriptionByUsername(upUsername) response: ", response)
 	if err != nil {
 		return ente.UpSubscriptionDetails{}, stacktrace.Propagate(err, "")
 	}
-
-	return response, nil
+	upUsername, ok := utils.UPUsernameFromEmail(user.Email)
+	if !ok {
+		return ente.UpSubscriptionDetails{}, stacktrace.Propagate(ente.ErrBadRequest, "user %d is not a UP account", userID)
+	}
+	return c.verifySubscriptionByUsername(upUsername)
 }
 
 func (c *UPStoreController) verifySubscriptionByUsername(username string) (ente.UpSubscriptionDetails, error) {
-	urlSubscriptionInner := viper.GetString("unplugged.inner-api-host")
-	client := &http.Client{
-		Timeout: 10 * time.Second,
-	}
-	req, err := http.NewRequest("GET", urlSubscriptionInner+UnpluggedGetUserSubscriptionEndpoint+username, nil)
-	if err != nil {
-		return ente.UpSubscriptionDetails{}, stacktrace.Propagate(err, "failed to create request")
-	}
-
-	resp, err := client.Do(req)
+	endpoint := viper.GetString("unplugged.inner-api-host") + UnpluggedGetUserSubscriptionEndpoint + url.QueryEscape(username)
+	resp, err := c.httpClient.Get(endpoint)
 	if err != nil {
 		return ente.UpSubscriptionDetails{}, stacktrace.Propagate(err, "failed to execute request")
 	}
@@ -81,11 +55,13 @@ func (c *UPStoreController) verifySubscriptionByUsername(username string) (ente.
 			"failed to verify subscription",
 		)
 	}
-	log.Info("UP response: ", resp.Body)
-	var newUPSubscription []ente.UpSubscriptionDetails
-	err = json.NewDecoder(resp.Body).Decode(&newUPSubscription)
-	if err != nil {
+	var subscriptions []ente.UpSubscriptionDetails
+	if err := json.NewDecoder(resp.Body).Decode(&subscriptions); err != nil {
 		return ente.UpSubscriptionDetails{}, stacktrace.Propagate(err, "failed to decode response")
 	}
-	return newUPSubscription[0], nil
+	if len(subscriptions) == 0 {
+		return ente.UpSubscriptionDetails{}, stacktrace.Propagate(ente.ErrNotFound, "no UP subscription for %s", username)
+	}
+	log.Infof("UP subscription for %s: type %s", username, subscriptions[0].Type)
+	return subscriptions[0], nil
 }

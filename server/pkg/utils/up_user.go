@@ -1,6 +1,10 @@
 package utils
 
 import (
+	"database/sql"
+	"errors"
+	"strings"
+
 	"github.com/ente/museum/ente"
 	"github.com/ente/museum/pkg/repo"
 	"github.com/ente/museum/pkg/utils/crypto"
@@ -14,34 +18,54 @@ type User struct {
 	HashingKey []byte
 }
 
+func upEmailSuffix() string {
+	return "@" + viper.GetString("unplugged.email-host")
+}
+
+// UPEmail returns the museum account email for a UP username:
+// <username>@<unplugged.email-host>. It rejects empty usernames and ones that
+// already contain "@" or whitespace, so a username can never be read as some
+// other account's email.
+func UPEmail(username string) (string, error) {
+	if username == "" || strings.ContainsAny(username, "@ \t\r\n") {
+		return "", stacktrace.Propagate(ente.ErrBadRequest, "invalid UP username")
+	}
+	if viper.GetString("unplugged.email-host") == "" {
+		return "", stacktrace.Propagate(errors.New("unplugged.email-host is not configured"), "")
+	}
+	return username + upEmailSuffix(), nil
+}
+
+// UPUsernameFromEmail is the inverse of UPEmail. It reports false when email
+// is not a UP account email.
+func UPUsernameFromEmail(email string) (string, bool) {
+	username, ok := strings.CutSuffix(email, upEmailSuffix())
+	if !ok || username == "" || strings.Contains(username, "@") {
+		return "", false
+	}
+	return username, true
+}
+
+// GetUserID resolves a UP username to the museum user whose email is
+// UPEmail(upUsername), returning that user's ID and email. It returns
+// ente.ErrBadRequest for an invalid username and ente.ErrNotFound when no such
+// user exists.
 func (c *User) GetUserID(upUsername string) (int64, string, error) {
-	var err error
-	var emailHash string
-	var user ente.User
-	emailHash, err = crypto.GetHash(upUsername, c.HashingKey)
-	log.Debugf("Username: %s, emailHash: %s", upUsername, emailHash)
+	email, err := UPEmail(upUsername)
 	if err != nil {
-		return 0, "", stacktrace.Propagate(err, "failed to hash username")
+		return 0, "", err
 	}
-	user, err = c.UserRepo.GetUserByEmailHash(emailHash)
-
+	emailHash, err := crypto.GetHash(email, c.HashingKey)
 	if err != nil {
-		err = nil
-		// If user not found, try with email format (username@domain)
-		log.Debugf("user not found c.UserRepo.GetUserByEmailHash(%s): %s", upUsername, err)
-
-		upUsername = upUsername + "@" + viper.GetString("unplugged.email-host")
-		emailHash, err = crypto.GetHash(upUsername, c.HashingKey)
-		log.Debugf("Username: %s, emailHash: %s", upUsername, emailHash)
-		if err != nil {
-			return 0, "", stacktrace.Propagate(err, "failed to hash email username")
-		}
-		user, err = c.UserRepo.GetUserByEmailHash(emailHash)
-		if err != nil {
-			log.Errorf("emailUser not found c.UserRepo.GetUserByEmailHash(%s): %s", upUsername, err)
-			return 0, "", stacktrace.Propagate(err, "failed to get user by emailUser hash")
-		}
+		return 0, "", stacktrace.Propagate(err, "failed to hash UP email")
 	}
-	log.Debugf("user found c.UserRepo.GetUserByEmailHash(emailHash): %d, %s", user.ID, upUsername)
-	return user.ID, upUsername, nil
+	user, err := c.UserRepo.GetUserByEmailHash(emailHash)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return 0, email, stacktrace.Propagate(ente.ErrNotFound, "no user for UP username")
+		}
+		return 0, "", stacktrace.Propagate(err, "failed to get user by UP email hash")
+	}
+	log.Debugf("UP username resolved to user %d", user.ID)
+	return user.ID, email, nil
 }

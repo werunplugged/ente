@@ -4,6 +4,7 @@
 package up
 
 import (
+	"strings"
 	"time"
 
 	"github.com/ente/museum/pkg/api"
@@ -40,7 +41,6 @@ func NewServer(
 	userRepo *repo.UserRepository,
 	billingRepo *repo.BillingRepository,
 	usageRepo *repo.UsageRepository,
-	fileRepo *repo.FileRepository,
 	commonBillController *commonbilling.Controller,
 	userController *user.UserController,
 	emergencyCtrl *emergency.Controller,
@@ -52,7 +52,7 @@ func NewServer(
 		log.Fatalf("Failed to initialize JWT validator: %v", err)
 	}
 	userUtils := &utils.User{UserRepo: userRepo, HashingKey: hashingKeyBytes}
-	upStoreController := controller.NewUPStoreController(billingRepo, fileRepo, userRepo, commonBillController)
+	upStoreController := controller.NewUPStoreController(userRepo)
 	upBillingController := controller.NewUPBillingController(
 		billingRepo,
 		userRepo,
@@ -66,7 +66,6 @@ func NewServer(
 	return &Server{
 		UserHandler: &api.UPUserHandler{
 			UserController:      userController,
-			JWTValidator:        jwtValidator,
 			UPBillingController: upBillingController,
 			UPStoreController:   upStoreController,
 			UserUtils:           userUtils,
@@ -85,8 +84,23 @@ func NewServer(
 			JWTValidator: jwtValidator,
 			Cache:        cache.New(1*time.Minute, 15*time.Minute),
 			UserUtils:    userUtils,
+			AdminRoles:   adminRoles(),
 		},
 	}
+}
+
+// adminRoles returns the Keycloak realm roles allowed on /up-admin.
+func adminRoles() []string {
+	var roles []string
+	for _, role := range viper.GetStringSlice("jwt.admin-roles") {
+		if role = strings.TrimSpace(role); role != "" {
+			roles = append(roles, role)
+		}
+	}
+	if len(roles) == 0 {
+		log.Warn("jwt.admin-roles is not configured: /up-admin will reject every request")
+	}
+	return roles
 }
 
 // RegisterRoutes registers the UP-only endpoints. Upstream endpoints whose
@@ -96,7 +110,6 @@ func (s *Server) RegisterRoutes(
 	server *gin.Engine,
 	publicAPI *gin.RouterGroup,
 	rateLimiter *middleware.RateLimitMiddleware,
-	authMiddleware middleware.AuthMiddleware,
 	urlSanitizer func(_ *gin.Context) string,
 ) {
 	upPrivateAPI := server.Group("/")
@@ -104,7 +117,7 @@ func (s *Server) RegisterRoutes(
 	upPrivateAPI.POST("/users/up/ott", s.UserHandler.SendOTT)
 
 	upAdminAPI := server.Group("/up-admin")
-	upAdminAPI.Use(s.accessTokenMiddleware.UPAccessTokenAuthMiddleware(), authMiddleware.AdminAuthMiddleware())
+	upAdminAPI.Use(s.accessTokenMiddleware.UPAccessTokenAuthMiddleware(), s.accessTokenMiddleware.UPAdminRoleMiddleware())
 	upAdminAPI.DELETE("/user/delete", s.adminHandler.UPDeleteUser)
 	upAdminAPI.GET("/users", s.adminHandler.UPGetUsers)
 

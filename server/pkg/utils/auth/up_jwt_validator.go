@@ -26,6 +26,9 @@ type JWTValidator struct {
 type JWTClaims struct {
 	PreferredUsername string `json:"preferred_username,omitempty"`
 	AuthorizedParty   string `json:"azp,omitempty"`
+	RealmAccess       struct {
+		Roles []string `json:"roles,omitempty"`
+	} `json:"realm_access,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -153,13 +156,4 @@ func (v *JWTValidator) ValidateToken(tokenString string) (*JWTClaims, error) {
 	}
 	return nil, stacktrace.Propagate(lastErr, "JWT validation failed with all public keys")
 
-}
-
-// GetPreferredUsername extracts the preferred_username claim from a JWT token
-func (v *JWTValidator) GetPreferredUsername(tokenString string) (string, error) {
-	claims, err := v.ValidateToken(tokenString)
-	if err != nil {
-		return "", err
-	}
-	return claims.PreferredUsername, nil
 }

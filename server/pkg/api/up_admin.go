@@ -10,9 +10,9 @@ import (
 	"github.com/ente/museum/pkg/controller/discord"
 	"github.com/ente/museum/pkg/controller/emergency"
 	"github.com/ente/museum/pkg/controller/user"
+	"github.com/ente/museum/pkg/middleware"
 	"github.com/ente/museum/pkg/repo"
 	"github.com/ente/museum/pkg/utils"
-	"github.com/ente/museum/pkg/utils/auth"
 	"github.com/ente/museum/pkg/utils/handler"
 	"github.com/ente/museum/pkg/utils/time"
 	"github.com/ente/stacktrace"
@@ -59,10 +59,11 @@ func (h *UPAdminHandler) UPDeleteUser(context *gin.Context) {
 		return
 	}
 
-	adminID := auth.GetUserID(context.Request.Header)
+	// The admin is authorized by Keycloak role and may have no museum account.
+	adminName := context.Request.Header.Get(middleware.UpUsernameHeader)
 	logger := logrus.WithFields(logrus.Fields{
 		"user_id":    userID,
-		"admin_id":   adminID,
+		"admin":      adminName,
 		"user_email": username,
 		"req_id":     requestid.Get(context),
 		"req_ctx":    "account_deletion",
@@ -74,9 +75,13 @@ func (h *UPAdminHandler) UPDeleteUser(context *gin.Context) {
 		return
 	}
 	isCanceled, err := h.UserController.BillingController.UPHandleAccountDeletion(userID, logger)
-	if err != nil || isCanceled == false {
-		logrus.Error("Something went wrong with the subscription cancellation {} ", err)
+	if err != nil {
+		logrus.Error("Something went wrong with the subscription cancellation: ", err)
 		handler.Error(context, stacktrace.Propagate(err, ""))
+		return
+	}
+	if !isCanceled {
+		handler.Error(context, stacktrace.Propagate(ente.ErrBadRequest, "subscription was not cancelled"))
 		return
 	}
 	deleted, err := h.UserController.HandleAccountDeletion(context, userID, logger)
@@ -86,6 +91,6 @@ func (h *UPAdminHandler) UPDeleteUser(context *gin.Context) {
 		return
 	}
 	go h.DiscordController.NotifyAdminAction(
-		fmt.Sprintf("Admin (%d) deleting account for %d", adminID, userID))
+		fmt.Sprintf("UP admin (%s) deleting account for %d", adminName, userID))
 	context.JSON(http.StatusOK, deleted)
 }
