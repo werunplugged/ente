@@ -95,14 +95,29 @@ apps:
   accounts:
   # Default is https://family.ente.io
   family:
-  unplugged:
-  inner-api-host: http://host.docker.internal:8577
-  email-host: matrix.unpluggedsystems.app
-  basic-plan-id: 63075533e186f8edf2078157
 
   custom-domain:
     # Default is my.ente.io
     cname:
+
+# Unplugged (UP) settings
+unplugged:
+  # Base URL of the UP API.
+  # Default is https://up-app-dev.unpluggedsystems.app
+  api-host:
+  # Base URL of the UP inner API, used to look up a user's UP subscription.
+  # Default is https://up-app-dev.unpluggedsystems.app
+  inner-api-host: http://host.docker.internal:8577
+  # A UP user <username> has the museum account <username>@<email-host>.
+  # Default is msg.unpluggedsystems.app
+  email-host: matrix.unpluggedsystems.app
+  # Product ID of the UP free plan.
+  # Default is free
+  basic-plan-id: 63075533e186f8edf2078157
+  # Secret used to verify the signature of UP subscription webhooks
+  # (/webhooks/up/subscriptions).
+  webhook-secret:
+
 # Database connection parameters
 db:
   host: localhost
@@ -234,9 +249,11 @@ key:
 # JWT secrets
 #
 # See: [Note: Self hosting credentials] above.
-#unplugged
 jwt:
   secret: secret=
+  # UP access tokens (RS256, issued by Keycloak) are validated against these
+  # public keys. public-key is a single-key fallback used when public-keys is
+  # empty.
   public-key: |
     -----BEGIN RSA PUBLIC KEY-----
 
@@ -256,6 +273,10 @@ jwt:
     - https://keycloak.example.com/auth/realms/your-realm
   audiences:
     - your-up-photos-client-id
+  # Keycloak realm roles (realm_access.roles) allowed on /up-admin. If empty,
+  # /up-admin rejects every request.
+  admin-roles:
+    - your-up-photos-admin-role
 
 # SMTP configuration (optional)
 #
