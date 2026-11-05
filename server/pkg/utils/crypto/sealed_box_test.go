@@ -3,72 +3,58 @@ package crypto
 import (
 	"crypto/rand"
 	"encoding/base64"
+	"errors"
 	"testing"
 
-	"github.com/GoKillers/libsodium-go/cryptobox"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/crypto/blake2b"
 	"golang.org/x/crypto/nacl/box"
 )
 
-func TestSealedBoxCompatibility(t *testing.T) {
-	// Initialize libsodium
-	InitSodiumForTest()
+func TestSealedBoxRoundTrip(t *testing.T) {
+	publicKey, privateKey, err := box.GenerateKey(rand.Reader)
+	require.NoError(t, err)
 
-	// Generate a test keypair for the recipient
-	recipientPublicKey, recipientPrivateKey, err := box.GenerateKey(rand.Reader)
-	require.NoError(t, err, "should generate keypair")
+	message := []byte("test-token-12345")
+	sealedBase64, err := GetEncryptedToken(
+		base64.URLEncoding.EncodeToString(message),
+		base64.StdEncoding.EncodeToString(publicKey[:]),
+	)
+	require.NoError(t, err)
 
-	// Prepare test data
-	originalToken := "test-token-12345"
-	tokenBytes := []byte(originalToken)
-	publicKeyBase64 := base64.StdEncoding.EncodeToString(recipientPublicKey[:])
-	tokenBase64 := base64.URLEncoding.EncodeToString(tokenBytes)
+	sealed, err := base64.StdEncoding.DecodeString(sealedBase64)
+	require.NoError(t, err)
+	require.Len(t, sealed, boxPublicKeyBytes+box.Overhead+len(message))
 
-	t.Run("libsodium sealed box can be opened", func(t *testing.T) {
-		// Encrypt with libsodium's crypto_box_seal
-		encryptedLibsodium, errCode := cryptobox.CryptoBoxSeal(tokenBytes, recipientPublicKey[:])
-		require.Equal(t, 0, errCode, "libsodium encryption should succeed")
+	decrypted, err := openSealedBox(sealed, publicKey, privateKey)
+	require.NoError(t, err)
+	require.Equal(t, message, decrypted)
+}
 
-		// Try to open with libsodium's crypto_box_seal_open
-		decrypted, errCode := cryptobox.CryptoBoxSealOpen(encryptedLibsodium, recipientPublicKey[:], recipientPrivateKey[:])
-		require.Equal(t, 0, errCode, "libsodium should decrypt its own sealed box")
-		require.Equal(t, tokenBytes, decrypted, "decrypted should match original")
-	})
+func openSealedBox(sealed []byte, publicKey, privateKey *[boxPublicKeyBytes]byte) ([]byte, error) {
+	if len(sealed) < boxPublicKeyBytes+box.Overhead {
+		return nil, errors.New("invalid sealed box length")
+	}
 
-	t.Run("compare GetEncryptedToken with GetEncryptedTokenNative", func(t *testing.T) {
-		// Encrypt with both implementations
-		encryptedLibsodium, err := GetEncryptedToken(tokenBase64, publicKeyBase64)
-		require.NoError(t, err, "libsodium GetEncryptedToken should succeed")
+	var ephemeralPublicKey [boxPublicKeyBytes]byte
+	copy(ephemeralPublicKey[:], sealed[:boxPublicKeyBytes])
 
-		encryptedNative, err := GetEncryptedTokenNative(tokenBase64, publicKeyBase64)
-		require.NoError(t, err, "native GetEncryptedTokenNative should succeed")
+	nonceInput := make([]byte, boxPublicKeyBytes*2)
+	copy(nonceInput[:boxPublicKeyBytes], ephemeralPublicKey[:])
+	copy(nonceInput[boxPublicKeyBytes:], publicKey[:])
 
-		// Decode the encrypted data
-		encryptedLibsodiumBytes, err := base64.StdEncoding.DecodeString(encryptedLibsodium)
-		require.NoError(t, err)
+	hash, err := blake2b.New(boxNonceBytes, nil)
+	if err != nil {
+		return nil, err
+	}
+	hash.Write(nonceInput)
 
-		encryptedNativeBytes, err := base64.StdEncoding.DecodeString(encryptedNative)
-		require.NoError(t, err)
+	var nonce [boxNonceBytes]byte
+	copy(nonce[:], hash.Sum(nil))
 
-		// Both should be 48 bytes + len(tokenBytes) (32 bytes ephemeral pubkey + 16 bytes auth tag + message)
-		expectedLen := 32 + 16 + len(tokenBytes)
-		require.Equal(t, expectedLen, len(encryptedLibsodiumBytes), "libsodium sealed box should have correct length")
-		require.Equal(t, expectedLen, len(encryptedNativeBytes), "native sealed box should have correct length")
-
-		// Try to decrypt libsodium's output with libsodium
-		decryptedLib, errCode := cryptobox.CryptoBoxSealOpen(encryptedLibsodiumBytes, recipientPublicKey[:], recipientPrivateKey[:])
-		require.Equal(t, 0, errCode, "libsodium should decrypt its own output")
-		require.Equal(t, tokenBytes, decryptedLib, "libsodium decrypted should match original")
-
-		// CRITICAL TEST: Try to decrypt native's output with libsodium
-		decryptedNative, errCode := cryptobox.CryptoBoxSealOpen(encryptedNativeBytes, recipientPublicKey[:], recipientPrivateKey[:])
-		if errCode != 0 {
-			t.Errorf("COMPATIBILITY ISSUE: libsodium cannot decrypt native sealed box (error code: %d)", errCode)
-			t.Log("This confirms the nonce derivation is incompatible")
-		} else {
-			require.Equal(t, tokenBytes, decryptedNative, "cross-decryption should work if compatible")
-			t.Log("SUCCESS: Native implementation is compatible with libsodium")
-		}
-	})
-
+	decrypted, ok := box.Open(nil, sealed[boxPublicKeyBytes:], &nonce, &ephemeralPublicKey, privateKey)
+	if !ok {
+		return nil, errors.New("failed to open sealed box")
+	}
+	return decrypted, nil
 }

@@ -4,26 +4,25 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
-	"github.com/ente-io/museum/pkg/repo/passkey"
-	storageBonusRepo "github.com/ente-io/museum/pkg/repo/storagebonus"
-	"github.com/ente-io/stacktrace"
+	"github.com/ente/museum/pkg/repo/passkey"
+	storageBonusRepo "github.com/ente/museum/pkg/repo/storagebonus"
+	emailUtil "github.com/ente/museum/pkg/utils/email"
+	"github.com/ente/stacktrace"
 	"github.com/lib/pq"
 
-	"github.com/ente-io/museum/ente"
-	"github.com/ente-io/museum/pkg/utils/crypto"
-	"github.com/ente-io/museum/pkg/utils/time"
+	"github.com/ente/museum/ente"
+	"github.com/ente/museum/pkg/utils/crypto"
+	"github.com/ente/museum/pkg/utils/time"
 )
 
 const (
-	// Format for updated email_hash once the account is deleted
 	DELETED_EMAIL_HASH_FORMAT = "deleted+%d@ente.io"
 )
 
-// UserRepository defines the methods for inserting, updating and retrieving
-// user entities from the underlying repository
 type UserRepository struct {
 	DB                  *sql.DB
 	SecretEncryptionKey []byte
@@ -32,7 +31,15 @@ type UserRepository struct {
 	PasskeysRepository  *passkey.Repository
 }
 
-// Get returns a user indicated by the userID
+type UserInactivityCandidate struct {
+	UserID       int64
+	LastActivity int64
+}
+
+type userMutationExecutor interface {
+	ExecContext(context.Context, string, ...any) (sql.Result, error)
+}
+
 func (repo *UserRepository) Get(userID int64) (ente.User, error) {
 	var user ente.User
 	var encryptedEmail, nonce []byte
@@ -41,11 +48,8 @@ func (repo *UserRepository) Get(userID int64) (ente.User, error) {
 	if err != nil {
 		return ente.User{}, stacktrace.Propagate(err, "")
 	}
-	// We should not be calling Get user for a deleted account. The one valid
-	// use case is for internal/Admin APIs, where please we should instead be
-	// using GetUserByIDInternal.
 	if strings.EqualFold(user.Hash, fmt.Sprintf(DELETED_EMAIL_HASH_FORMAT, userID)) {
-		return user, stacktrace.Propagate(ente.ErrUserDeleted, fmt.Sprintf("user account is deleted %d", userID))
+		return user, stacktrace.Propagate(ente.ErrUserDeleted, "user account is deleted %d", userID)
 	}
 	email, err := crypto.Decrypt(encryptedEmail, repo.SecretEncryptionKey, nonce)
 	if err != nil {
@@ -55,7 +59,7 @@ func (repo *UserRepository) Get(userID int64) (ente.User, error) {
 	return user, nil
 }
 
-// GetUserByIDInternal returns a user indicated by the id. Strickly use this method for internal APIs only.
+// Internal APIs only; unlike Get, this does not reject the deleted-account marker.
 func (repo *UserRepository) GetUserByIDInternal(id int64) (ente.User, error) {
 	var user ente.User
 	var encryptedEmail, nonce []byte
@@ -72,15 +76,41 @@ func (repo *UserRepository) GetUserByIDInternal(id int64) (ente.User, error) {
 	return user, nil
 }
 
-// Delete removes the email_hash and encrypted email information for the user. It replaces email_hash with placeholder value
-// based on DELETED_EMAIL_HASH_FORMAT
+func (repo *UserRepository) IsLikelySelfHosted() bool {
+	var userOneExists bool
+	if err := repo.DB.QueryRow(`SELECT EXISTS(SELECT 1 FROM users WHERE user_id = 1)`).Scan(&userOneExists); err != nil {
+		return false
+	}
+
+	return !userOneExists
+}
+
 func (repo *UserRepository) Delete(userID int64) error {
-	emailHash := fmt.Sprintf(DELETED_EMAIL_HASH_FORMAT, userID)
-	_, err := repo.DB.Exec(`UPDATE users SET encrypted_email = null, email_decryption_nonce = null, email_hash = $1 WHERE user_id = $2`, emailHash, userID)
+	return deleteUser(context.Background(), repo.DB, userID)
+}
+
+func (repo *UserRepository) DeleteTx(ctx context.Context, tx *sql.Tx, userID int64) (string, []RevokedToken, error) {
+	var emailHash string
+	var active bool
+	if err := tx.QueryRowContext(ctx, `SELECT email_hash, encrypted_email IS NOT NULL FROM users WHERE user_id = $1 FOR NO KEY UPDATE`, userID).Scan(&emailHash, &active); err != nil {
+		return "", nil, stacktrace.Propagate(err, "failed to read user for deletion")
+	}
+	if !active {
+		return "", nil, ente.ErrUserDeleted
+	}
+	revokedTokens, err := markTokensDeleted(tx, `UPDATE tokens SET is_deleted = true WHERE user_id = $1 AND is_deleted = false RETURNING app, token_hash`, userID)
+	if err != nil {
+		return "", nil, err
+	}
+	return emailHash, revokedTokens, deleteUser(ctx, tx, userID)
+}
+
+func deleteUser(ctx context.Context, executor userMutationExecutor, userID int64) error {
+	deletedEmailHash := fmt.Sprintf(DELETED_EMAIL_HASH_FORMAT, userID)
+	_, err := executor.ExecContext(ctx, `UPDATE users SET encrypted_email = null, email_decryption_nonce = null, email_hash = $1 WHERE user_id = $2`, deletedEmailHash, userID)
 	return stacktrace.Propagate(err, "")
 }
 
-// GetFamilyAdminID returns the *familyAdminID for the given userID
 func (repo *UserRepository) GetFamilyAdminID(userID int64) (*int64, error) {
 	row := repo.DB.QueryRow(`SELECT family_admin_id FROM users WHERE user_id = $1`, userID)
 	var familyAdminID *int64
@@ -91,7 +121,19 @@ func (repo *UserRepository) GetFamilyAdminID(userID int64) (*int64, error) {
 	return familyAdminID, nil
 }
 
-// GetUserByEmailHash returns a user indicated by the emailHash
+func (repo *UserRepository) AreUsersInSameFamily(ctx context.Context, firstUserID, secondUserID int64) (bool, error) {
+	var sameFamily bool
+	err := repo.DB.QueryRowContext(ctx, `SELECT EXISTS(
+		SELECT 1
+		FROM users first_user
+		JOIN users second_user ON first_user.family_admin_id = second_user.family_admin_id
+		WHERE first_user.user_id = $1
+		  AND second_user.user_id = $2
+		  AND first_user.family_admin_id IS NOT NULL
+	)`, firstUserID, secondUserID).Scan(&sameFamily)
+	return sameFamily, stacktrace.Propagate(err, "")
+}
+
 func (repo *UserRepository) GetUserByEmailHash(emailHash string) (ente.User, error) {
 	var user ente.User
 	row := repo.DB.QueryRow(`SELECT user_id, email_hash, creation_time FROM users WHERE email_hash = $1`, emailHash)
@@ -102,7 +144,6 @@ func (repo *UserRepository) GetUserByEmailHash(emailHash string) (ente.User, err
 	return user, nil
 }
 
-// GetAll returns all users between sinceTime and tillTime (exclusive).
 func (repo *UserRepository) GetAll(sinceTime int64, tillTime int64) ([]ente.User, error) {
 	rows, err := repo.DB.Query(`SELECT user_id, encrypted_email, email_decryption_nonce, email_hash, creation_time FROM users WHERE creation_time > $1 AND creation_time < $2 AND encrypted_email IS NOT NULL ORDER BY creation_time`, sinceTime, tillTime)
 	if err != nil {
@@ -128,8 +169,115 @@ func (repo *UserRepository) GetAll(sinceTime int64, tillTime int64) ([]ente.User
 	return users, nil
 }
 
-// GetUserUsageWithSubData will return current storage usage & basic information about subscription for given list
-// of users. It's primarily used for fetching storage utilisation for a family/group of users
+// Effective activity is the latest account creation, token, authenticator, or
+// collection activity. Results page by user ID.
+func (repo *UserRepository) GetActiveUsersByLastActivityBefore(beforeTime int64, afterUserID int64, limit int) ([]UserInactivityCandidate, error) {
+	rows, err := repo.DB.Query(`
+		SELECT
+			candidate.user_id,
+			candidate.last_activity
+		FROM (
+			SELECT
+				u.user_id,
+				GREATEST(
+					u.creation_time,
+					COALESCE(t.last_token_activity, 0),
+					COALESCE(a.last_auth_activity, 0),
+					COALESCE(c.last_collection_activity, 0)
+				) AS last_activity
+			FROM users u
+			LEFT JOIN LATERAL (
+				SELECT t.last_used_at AS last_token_activity
+				FROM tokens t
+				WHERE t.user_id = u.user_id
+				ORDER BY t.last_used_at DESC
+				LIMIT 1
+			) t ON TRUE
+			LEFT JOIN LATERAL (
+				SELECT ae.updated_at AS last_auth_activity
+				FROM authenticator_entity ae
+				WHERE ae.user_id = u.user_id
+				ORDER BY ae.updated_at DESC
+				LIMIT 1
+			) a ON TRUE
+			LEFT JOIN LATERAL (
+				SELECT c.updation_time AS last_collection_activity
+				FROM collections c
+				WHERE c.owner_id = u.user_id
+				ORDER BY c.updation_time DESC
+				LIMIT 1
+				) c ON TRUE
+				WHERE u.encrypted_email IS NOT NULL
+					AND u.creation_time <= $1
+					AND u.user_id > $2
+			) candidate
+			WHERE candidate.last_activity <= $1
+		ORDER BY candidate.user_id
+		LIMIT $3`, beforeTime, afterUserID, limit)
+	if err != nil {
+		return nil, stacktrace.Propagate(err, "failed to fetch inactive users")
+	}
+	defer rows.Close()
+
+	result := make([]UserInactivityCandidate, 0)
+	for rows.Next() {
+		var candidate UserInactivityCandidate
+		if err := rows.Scan(&candidate.UserID, &candidate.LastActivity); err != nil {
+			return nil, stacktrace.Propagate(err, "failed to scan inactive user row")
+		}
+		result = append(result, candidate)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, stacktrace.Propagate(err, "failed to iterate inactive users")
+	}
+	return result, nil
+}
+
+// The second return value is false when the user is no longer active.
+func (repo *UserRepository) GetLatestActivity(userID int64) (int64, bool, error) {
+	var lastActivity int64
+	err := repo.DB.QueryRow(`
+		SELECT
+			GREATEST(
+				u.creation_time,
+				COALESCE(t.last_token_activity, 0),
+				COALESCE(a.last_auth_activity, 0),
+				COALESCE(c.last_collection_activity, 0)
+			) AS last_activity
+		FROM users u
+		LEFT JOIN LATERAL (
+			SELECT t.last_used_at AS last_token_activity
+			FROM tokens t
+			WHERE t.user_id = u.user_id
+			ORDER BY t.last_used_at DESC
+			LIMIT 1
+		) t ON TRUE
+		LEFT JOIN LATERAL (
+			SELECT ae.updated_at AS last_auth_activity
+			FROM authenticator_entity ae
+			WHERE ae.user_id = u.user_id
+			ORDER BY ae.updated_at DESC
+			LIMIT 1
+		) a ON TRUE
+		LEFT JOIN LATERAL (
+			SELECT c.updation_time AS last_collection_activity
+			FROM collections c
+			WHERE c.owner_id = u.user_id
+			ORDER BY c.updation_time DESC
+			LIMIT 1
+		) c ON TRUE
+		WHERE u.user_id = $1
+			AND u.encrypted_email IS NOT NULL
+	`, userID).Scan(&lastActivity)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return 0, false, nil
+		}
+		return 0, false, stacktrace.Propagate(err, "failed to fetch latest user activity")
+	}
+	return lastActivity, true, nil
+}
+
 func (repo *UserRepository) GetUserUsageWithSubData(ctx context.Context, userIds []int64) ([]ente.UserUsageWithSubData, error) {
 	rows, err := repo.DB.QueryContext(ctx, `select encrypted_email, email_decryption_nonce, u.user_id, coalesce(storage_consumed , 0) as storage_used, storage, expiry_time 
 	from users as u
@@ -162,11 +310,9 @@ func (repo *UserRepository) GetUserUsageWithSubData(ctx context.Context, userIds
 	return result, nil
 }
 
-// Create creates a user with a given email address and returns the generated
-// userID
-func (repo *UserRepository) Create(encryptedEmail ente.EncryptionResult, emailHash string, source *string) (int64, error) {
+func (repo *UserRepository) CreateTx(ctx context.Context, tx *sql.Tx, encryptedEmail ente.EncryptionResult, emailHash string, source *string) (int64, error) {
 	var userID int64
-	err := repo.DB.QueryRow(`INSERT INTO users(encrypted_email, email_decryption_nonce, email_hash, creation_time, source) VALUES($1, $2, $3, $4, $5) RETURNING user_id`,
+	err := tx.QueryRowContext(ctx, `INSERT INTO users(encrypted_email, email_decryption_nonce, email_hash, creation_time, source) VALUES($1, $2, $3, $4, $5) RETURNING user_id`,
 		encryptedEmail.Cipher, encryptedEmail.Nonce, emailHash, time.Microseconds(), source).Scan(&userID)
 	if err != nil {
 		return -1, stacktrace.Propagate(err, "")
@@ -174,27 +320,32 @@ func (repo *UserRepository) Create(encryptedEmail ente.EncryptionResult, emailHa
 	return userID, nil
 }
 
-// UpdateDeleteFeedback for a given user in the delete_feedback column of type jsonb
 func (repo *UserRepository) UpdateDeleteFeedback(userID int64, feedback map[string]string) error {
-	// Convert the feedback map into JSON
 	feedbackJSON, err := json.Marshal(feedback)
 	if err != nil {
 		return stacktrace.Propagate(err, "Failed to marshal feedback into JSON")
 	}
-	// Execute the update query with the JSON
 	_, err = repo.DB.Exec(`UPDATE users SET delete_feedback = $1 WHERE user_id = $2`, feedbackJSON, userID)
 	return stacktrace.Propagate(err, "Failed to update delete feedback")
 }
 
-// UpdateEmail updates the email address of a user
 func (repo *UserRepository) UpdateEmail(userID int64, encryptedEmail ente.EncryptionResult, emailHash string) error {
-	_, err := repo.DB.Exec(`UPDATE users SET encrypted_email = $1, email_decryption_nonce = $2, email_hash = $3 WHERE user_id = $4`, encryptedEmail.Cipher, encryptedEmail.Nonce, emailHash, userID)
+	return updateEmail(context.Background(), repo.DB, userID, encryptedEmail, emailHash)
+}
+
+func (repo *UserRepository) UpdateEmailTx(ctx context.Context, tx *sql.Tx, userID int64, encryptedEmail ente.EncryptionResult, emailHash string) error {
+	return updateEmail(ctx, tx, userID, encryptedEmail, emailHash)
+}
+
+func updateEmail(ctx context.Context, executor userMutationExecutor, userID int64, encryptedEmail ente.EncryptionResult, emailHash string) error {
+	_, err := executor.ExecContext(ctx, `UPDATE users SET encrypted_email = $1, email_decryption_nonce = $2, email_hash = $3 WHERE user_id = $4`, encryptedEmail.Cipher, encryptedEmail.Nonce, emailHash, userID)
 	return stacktrace.Propagate(err, "")
 }
 
-// GetUserIDWithEmail returns the userID associated with a provided email
-func (repo *UserRepository) GetUserIDWithEmail(email string) (int64, error) {
-	sanitizedEmail := strings.ToLower(strings.TrimSpace(email))
+// Trusted, non-disclosing flows only. User-facing discovery must use
+// controller.UserLookup.
+func (repo *UserRepository) GetUserIDWithEmailUnrestricted(email string) (int64, error) {
+	sanitizedEmail := emailUtil.NormalizeEmail(email)
 	emailHash, err := crypto.GetHash(sanitizedEmail, repo.HashingKey)
 	if err != nil {
 		return -1, stacktrace.Propagate(err, "")
@@ -208,19 +359,16 @@ func (repo *UserRepository) GetUserIDWithEmail(email string) (int64, error) {
 	return userID, nil
 }
 
-// GetKeyAttributes gets the key attributes for a given user
 func (repo *UserRepository) GetKeyAttributes(userID int64) (ente.KeyAttributes, error) {
-	row := repo.DB.QueryRow(`SELECT kek_salt, kek_hash_bytes, encrypted_key, key_decryption_nonce, public_key, encrypted_secret_key, secret_key_decryption_nonce, mem_limit, ops_limit, master_key_encrypted_with_recovery_key, master_key_decryption_nonce, recovery_key_encrypted_with_master_key, recovery_key_decryption_nonce FROM key_attributes WHERE user_id = $1`, userID)
+	row := repo.DB.QueryRow(`SELECT kek_salt, encrypted_key, key_decryption_nonce, public_key, encrypted_secret_key, secret_key_decryption_nonce, mem_limit, ops_limit, master_key_encrypted_with_recovery_key, master_key_decryption_nonce, recovery_key_encrypted_with_master_key, recovery_key_decryption_nonce FROM key_attributes WHERE user_id = $1`, userID)
 	var (
 		keyAttributes                     ente.KeyAttributes
-		kekHashBytes                      []byte
 		masterKeyEncryptedWithRecoveryKey sql.NullString
 		masterKeyDecryptionNonce          sql.NullString
 		recoveryKeyEncryptedWithMasterKey sql.NullString
 		recoveryKeyDecryptionNonce        sql.NullString
 	)
 	err := row.Scan(&keyAttributes.KEKSalt,
-		&kekHashBytes,
 		&keyAttributes.EncryptedKey,
 		&keyAttributes.KeyDecryptionNonce,
 		&keyAttributes.PublicKey,
@@ -236,7 +384,6 @@ func (repo *UserRepository) GetKeyAttributes(userID int64) (ente.KeyAttributes, 
 	if err != nil {
 		return ente.KeyAttributes{}, stacktrace.Propagate(err, "")
 	}
-	keyAttributes.KEKHash = string(kekHashBytes)
 	if masterKeyEncryptedWithRecoveryKey.Valid {
 		keyAttributes.MasterKeyEncryptedWithRecoveryKey = masterKeyEncryptedWithRecoveryKey.String
 	}
@@ -253,10 +400,9 @@ func (repo *UserRepository) GetKeyAttributes(userID int64) (ente.KeyAttributes, 
 	return keyAttributes, nil
 }
 
-// SetKeyAttributes sets the key attributes for a given user
 func (repo *UserRepository) SetKeyAttributes(userID int64, keyAttributes ente.KeyAttributes) error {
-	_, err := repo.DB.Exec(`INSERT INTO key_attributes(user_id, kek_salt, kek_hash_bytes, encrypted_key, key_decryption_nonce, public_key, encrypted_secret_key, secret_key_decryption_nonce, mem_limit, ops_limit, master_key_encrypted_with_recovery_key, master_key_decryption_nonce, recovery_key_encrypted_with_master_key, recovery_key_decryption_nonce) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
-		userID, keyAttributes.KEKSalt, []byte(keyAttributes.KEKHash),
+	_, err := repo.DB.Exec(`INSERT INTO key_attributes(user_id, kek_salt, encrypted_key, key_decryption_nonce, public_key, encrypted_secret_key, secret_key_decryption_nonce, mem_limit, ops_limit, master_key_encrypted_with_recovery_key, master_key_decryption_nonce, recovery_key_encrypted_with_master_key, recovery_key_decryption_nonce) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+		userID, keyAttributes.KEKSalt,
 		keyAttributes.EncryptedKey, keyAttributes.KeyDecryptionNonce,
 		keyAttributes.PublicKey, keyAttributes.EncryptedSecretKey,
 		keyAttributes.SecretKeyDecryptionNonce, keyAttributes.MemLimit, keyAttributes.OpsLimit,
@@ -265,14 +411,12 @@ func (repo *UserRepository) SetKeyAttributes(userID int64, keyAttributes ente.Ke
 	return stacktrace.Propagate(err, "")
 }
 
-// SetRecoveryKeyAttributes sets the recovery key and related attributes for a user
 func (repo *UserRepository) SetRecoveryKeyAttributes(userID int64, keys ente.SetRecoveryKeyRequest) error {
 	_, err := repo.DB.Exec(`UPDATE key_attributes SET master_key_encrypted_with_recovery_key = $1, master_key_decryption_nonce = $2, recovery_key_encrypted_with_master_key = $3, recovery_key_decryption_nonce = $4 WHERE user_id = $5`,
 		keys.MasterKeyEncryptedWithRecoveryKey, keys.MasterKeyDecryptionNonce, keys.RecoveryKeyEncryptedWithMasterKey, keys.RecoveryKeyDecryptionNonce, userID)
 	return stacktrace.Propagate(err, "")
 }
 
-// GetPublicKey returns the public key of a user
 func (repo *UserRepository) GetPublicKey(userID int64) (string, error) {
 	row := repo.DB.QueryRow(`SELECT public_key FROM key_attributes WHERE user_id = $1`, userID)
 	var publicKey string
@@ -280,8 +424,6 @@ func (repo *UserRepository) GetPublicKey(userID int64) (string, error) {
 	return publicKey, stacktrace.Propagate(err, "")
 }
 
-// GetUsersWithIndividualPlanWhoHaveExceededStorageQuota returns list of users who have consumed their storage quota
-// and they are not part of any family plan
 func (repo *UserRepository) GetUsersWithIndividualPlanWhoHaveExceededStorageQuota() ([]ente.User, error) {
 	rows, err := repo.DB.Query(`
 		SELECT users.user_id, users.encrypted_email, users.email_decryption_nonce, users.email_hash, usage.storage_consumed, subscriptions.storage
@@ -308,13 +450,11 @@ func (repo *UserRepository) GetUsersWithIndividualPlanWhoHaveExceededStorageQuot
 		if err != nil {
 			return users, stacktrace.Propagate(err, "")
 		}
-		// ignore deleted users
 		if strings.EqualFold(user.Hash, fmt.Sprintf(DELETED_EMAIL_HASH_FORMAT, &user.ID)) || len(encryptedEmail) == 0 {
 			continue
 		}
 		if refBonusStorage, ok := refBonus[user.ID]; ok {
 			addOnBonusStorage := addOnBonus[user.ID]
-			// cap usable ref bonus to the subscription storage + addOnBonus
 			if refBonusStorage > (subStorage + addOnBonusStorage) {
 				refBonusStorage = subStorage + addOnBonusStorage
 			}
@@ -334,7 +474,7 @@ func (repo *UserRepository) GetUsersWithIndividualPlanWhoHaveExceededStorageQuot
 
 func (repo *UserRepository) GetUsersWhoUpgradedNDaysAgo(days int) ([]ente.User, error) {
 	rows, err := repo.DB.Query(`
-        SELECT u.user_id, u.encrypted_email, u.email_decryption_nonce, u.email_hash, u.creation_time 
+        SELECT u.user_id, u.encrypted_email, u.email_decryption_nonce, u.email_hash, u.creation_time, u.family_admin_id
         FROM users u
         INNER JOIN subscriptions s ON u.user_id = s.user_id
         WHERE s.upgraded_at >= $1 AND s.upgraded_at < $2 AND u.encrypted_email IS NOT NULL`,
@@ -347,7 +487,7 @@ func (repo *UserRepository) GetUsersWhoUpgradedNDaysAgo(days int) ([]ente.User, 
 	for rows.Next() {
 		var user ente.User
 		var encryptedEmail, nonce []byte
-		err := rows.Scan(&user.ID, &encryptedEmail, &nonce, &user.Hash, &user.CreationTime)
+		err := rows.Scan(&user.ID, &encryptedEmail, &nonce, &user.Hash, &user.CreationTime, &user.FamilyAdminID)
 		if err != nil {
 			return nil, stacktrace.Propagate(err, "")
 		}
@@ -361,7 +501,6 @@ func (repo *UserRepository) GetUsersWhoUpgradedNDaysAgo(days int) ([]ente.User, 
 	return users, nil
 }
 
-// SetTwoFactorSecret sets the two factor secret for a user
 func (repo *UserRepository) SetTwoFactorSecret(userID int64, secret ente.EncryptionResult, secretHash string, recoveryEncryptedTwoFactorSecret string, recoveryTwoFactorSecretDecryptionNonce string) error {
 	_, err := repo.DB.Exec(`INSERT INTO two_factor(user_id,encrypted_two_factor_secret,two_factor_secret_decryption_nonce,two_factor_secret_hash,recovery_encrypted_two_factor_secret,recovery_two_factor_secret_decryption_nonce) 
 		VALUES($1, $2, $3, $4, $5, $6) 
@@ -376,7 +515,6 @@ func (repo *UserRepository) SetTwoFactorSecret(userID int64, secret ente.Encrypt
 	return stacktrace.Propagate(err, "")
 }
 
-// IsTwoFactorEnabled checks if a user's two factor is enabled or not
 func (repo *UserRepository) IsTwoFactorEnabled(userID int64) (bool, error) {
 	var twoFAStatus bool
 	row := repo.DB.QueryRow(`SELECT is_two_factor_enabled FROM users WHERE user_id = $1`, userID)
@@ -419,7 +557,52 @@ func (repo *UserRepository) GetEmailsFromHashes(hashes []string) ([]string, erro
 	return emails, nil
 }
 
-// GetActiveUsersForIds  returns a map of users by their IDs, similar to GetUserByID
+func (repo *UserRepository) CountActiveUsersByEmailHashes(hashes []string) (int, error) {
+	if len(hashes) == 0 {
+		return 0, nil
+	}
+	var count int
+	err := repo.DB.QueryRow(`
+		SELECT COUNT(*)
+		FROM users
+		WHERE encrypted_email IS NOT NULL
+		  AND email_hash = ANY($1);
+	`, pq.Array(hashes)).Scan(&count)
+	if err != nil {
+		return 0, stacktrace.Propagate(err, "")
+	}
+	return count, nil
+}
+
+func (repo *UserRepository) GetActiveUserEmailHashes(hashes []string) ([]string, error) {
+	if len(hashes) == 0 {
+		return []string{}, nil
+	}
+	rows, err := repo.DB.Query(`
+		SELECT email_hash
+		FROM users
+		WHERE encrypted_email IS NOT NULL
+		  AND email_hash = ANY($1);
+	`, pq.Array(hashes))
+	if err != nil {
+		return nil, stacktrace.Propagate(err, "")
+	}
+	defer rows.Close()
+
+	matchedHashes := make([]string, 0, len(hashes))
+	for rows.Next() {
+		var emailHash string
+		if err := rows.Scan(&emailHash); err != nil {
+			return nil, stacktrace.Propagate(err, "")
+		}
+		matchedHashes = append(matchedHashes, emailHash)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, stacktrace.Propagate(err, "")
+	}
+	return matchedHashes, nil
+}
+
 func (repo *UserRepository) GetActiveUsersForIds(id []int64) (map[int64]*ente.User, error) {
 	result := make(map[int64]*ente.User)
 	rows, err := repo.DB.Query(`SELECT user_id, encrypted_email, email_decryption_nonce, email_hash, creation_time FROM users WHERE  encrypted_email IS NOT NULL and user_id = ANY($1)`, pq.Array(id))

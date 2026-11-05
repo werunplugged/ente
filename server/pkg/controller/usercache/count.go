@@ -1,14 +1,32 @@
 package usercache
 
 import (
-	"github.com/ente-io/museum/ente"
-	"github.com/ente-io/museum/ente/cache"
-	"github.com/ente-io/stacktrace"
+	"context"
+
+	"github.com/ente/museum/ente"
+	"github.com/ente/museum/ente/cache"
+	"github.com/ente/stacktrace"
 	"github.com/sirupsen/logrus"
 )
 
 func (c *Controller) GetUserFileCountWithCache(userID int64, app ente.App) (int64, error) {
-	// Check if the value is present in the cache
+	_, photos, locker, err := c.UsageRepo.GetStoredFileCounts(context.Background(), userID)
+	if err != nil {
+		return 0, stacktrace.Propagate(err, "")
+	}
+	count := int64(-1)
+	switch app {
+	case ente.Photos:
+		count = photos
+	case ente.Locker:
+		count = locker
+	}
+	if count >= 0 {
+		return count, nil
+	}
+	if (app == ente.Photos || app == ente.Locker) && c.UsageRepo.QueueFileCountInitialization != nil {
+		c.UsageRepo.QueueFileCountInitialization(userID)
+	}
 	if count, ok := c.UserCache.GetFileCount(userID, app); ok {
 		// Cache hit, update the cache asynchronously
 		go func() {
@@ -28,7 +46,7 @@ func (c *Controller) getUserCountAndUpdateCache(userID int64, app ente.App, oldC
 	if err != nil {
 		return 0, stacktrace.Propagate(err, "")
 	}
-	if oldCache != nil && oldCache.Usage == usage && oldCache.TrashUpdatedAt == trashUpdatedAt {
+	if oldCache != nil && oldCache.Usage == usage && oldCache.TrashUpdatedAt == trashUpdatedAt && app != ente.Locker {
 		logrus.Debugf("Cache hit for user %d", userID)
 		return oldCache.Count, nil
 	}

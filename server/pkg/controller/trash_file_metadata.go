@@ -5,12 +5,11 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/ente-io/museum/pkg/repo"
-	"github.com/ente-io/museum/pkg/utils/time"
+	"github.com/ente/museum/pkg/repo"
+	"github.com/ente/museum/pkg/utils/time"
 	log "github.com/sirupsen/logrus"
 )
 
-// DropFileMetadataCron removes the metadata for deleted files
 func (t *TrashController) DropFileMetadataCron() {
 	ctx := context.Background()
 	lockName := "dropTrashedFileMetadata"

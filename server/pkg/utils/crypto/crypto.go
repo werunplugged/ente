@@ -1,106 +1,143 @@
 package crypto
 
 import (
+	"crypto/rand"
 	"encoding/base64"
-	"github.com/sirupsen/logrus"
+	"encoding/hex"
 
-	"github.com/GoKillers/libsodium-go/cryptobox"
-	generichash "github.com/GoKillers/libsodium-go/cryptogenerichash"
-	cryptosecretbox "github.com/GoKillers/libsodium-go/cryptosecretbox"
-	"github.com/ente-io/museum/ente"
-	"github.com/ente-io/museum/pkg/utils/auth"
-	"github.com/ente-io/stacktrace"
+	"github.com/ente/museum/ente"
+	"github.com/ente/museum/pkg/utils/auth"
+	"github.com/ente/stacktrace"
+	"golang.org/x/crypto/blake2b"
+	"golang.org/x/crypto/curve25519"
+	"golang.org/x/crypto/nacl/box"
+	"golang.org/x/crypto/nacl/secretbox"
 )
 
-// Exported constants matching libsodium
 const (
-	SecretBoxKeyBytes   = 32 // crypto_secretbox_KEYBYTES in libsodium
-	SecretBoxNonceBytes = 24 // crypto_secretbox_NONCEBYTES in libsodium
-	GenericHashBytes    = 32 // crypto_generichash_BYTES in libsodium (BLAKE2b-256)
-	BoxPublicKeyBytes   = 32 // crypto_box_publickeybytes in lib-sodium
+	secretBoxKeyBytes   = 32 // crypto_secretbox_KEYBYTES in libsodium
+	secretBoxNonceBytes = 24 // crypto_secretbox_NONCEBYTES in libsodium
+	boxPublicKeyBytes   = 32 // crypto_box_publickeybytes in lib-sodium
+	boxNonceBytes       = 24 // crypto_box_NONCEBYTES in libsodium
 )
 
 func Encrypt(data string, encryptionKey []byte) (ente.EncryptionResult, error) {
-	if SecretBoxNonceBytes != cryptosecretbox.CryptoSecretBoxNonceBytes() {
-		return ente.EncryptionResult{}, stacktrace.NewError("SecretBoxNonceBytes constant does not match the actual nonce size")
+	nonce := auth.GenerateRandomBytes(secretBoxNonceBytes)
+	if len(encryptionKey) != secretBoxKeyBytes {
+		return ente.EncryptionResult{}, stacktrace.NewError("invalid key length")
 	}
-	nonce, err := auth.GenerateRandomBytes(SecretBoxNonceBytes)
-	if err != nil {
-		return ente.EncryptionResult{}, stacktrace.Propagate(err, "")
-	}
-	return encryptWithNonce(data, encryptionKey, nonce)
+	var key [secretBoxKeyBytes]byte
+	copy(key[:], encryptionKey)
+
+	var nonceArray [secretBoxNonceBytes]byte
+	copy(nonceArray[:], nonce)
+
+	encrypted := secretbox.Seal(nil, []byte(data), &nonceArray, &key)
+
+	return ente.EncryptionResult{
+		Cipher: encrypted,
+		Nonce:  nonce,
+	}, nil
 }
 
-func encryptWithNonce(data string, encryptionKey []byte, nonce []byte) (ente.EncryptionResult, error) {
-	encryptedEmailBytes, errCode := cryptosecretbox.CryptoSecretBoxEasy([]byte(data), nonce, encryptionKey)
-	if errCode != 0 {
-		return ente.EncryptionResult{}, stacktrace.NewError("encryption failed")
+func Decrypt(cipher []byte, encryptionKey []byte, nonce []byte) (string, error) {
+	if len(encryptionKey) != secretBoxKeyBytes {
+		return "", stacktrace.NewError("invalid key length")
 	}
-	nativeEnc, err := encryptWithNonceNative(data, encryptionKey, nonce)
-	if err != nil {
-		logrus.WithField("op", "crypto_compare").WithError(err).Error("native encryption failed")
-		return ente.EncryptionResult{}, stacktrace.Propagate(err, "native encryption failed")
-	}
-	if nativeEnc.Cipher == nil {
-		return ente.EncryptionResult{}, stacktrace.NewError("native encryption returned nil cipher")
-	}
-	if base64.StdEncoding.EncodeToString(nativeEnc.Cipher) != base64.StdEncoding.EncodeToString(encryptedEmailBytes) ||
-		base64.StdEncoding.EncodeToString(nativeEnc.Nonce) != base64.StdEncoding.EncodeToString(nonce) {
-		logrus.WithField("op", "crypto_compare").Error("encryption mismatch between libsodium and native implementation")
-		return ente.EncryptionResult{}, stacktrace.NewError("encryption mismatch  nonce or cipher not same")
-	}
-	return nativeEnc, nil
-}
+	var key [secretBoxKeyBytes]byte
+	copy(key[:], encryptionKey)
 
-func Decrypt(cipher []byte, key []byte, nonce []byte) (string, error) {
-	decryptedBytes, err := cryptosecretbox.CryptoSecretBoxOpenEasy(cipher, nonce, key)
-	if err != 0 {
-		return "", stacktrace.NewError("email decryption failed")
+	if len(nonce) != secretBoxNonceBytes {
+		return "", stacktrace.NewError("invalid nonce length")
 	}
-	result := string(decryptedBytes)
-	nativeResult, nativeErr := DecryptNative(cipher, key, nonce)
-	if nativeErr != nil {
-		logrus.WithField("op", "crypto_compare").WithError(nativeErr).Error("native decryption failed")
-		return "", stacktrace.Propagate(nativeErr, "native decryption failed")
-	} else if nativeResult != result {
-		logrus.WithField("op", "crypto_compare").Error("decryption mismatch between libsodium and native implementation")
-		return "", stacktrace.NewError("decryption mismatch")
+	var nonceArray [secretBoxNonceBytes]byte
+	copy(nonceArray[:], nonce)
+
+	decrypted, ok := secretbox.Open(nil, cipher, &nonceArray, &key)
+	if !ok {
+		return "", stacktrace.NewError("decryption failed")
 	}
-	return nativeResult, nil
+
+	return string(decrypted), nil
 }
 
 func GetHash(data string, hashKey []byte) (string, error) {
-	if GenericHashBytes != generichash.CryptoGenericHashBytes() {
-		return "", stacktrace.NewError("GenericHashBytes constant does not match the actual hash size")
+	hash, err := blake2b.New256(hashKey)
+	if err != nil {
+		return "", stacktrace.Propagate(err, "failed to create blake2b hasher")
 	}
-	dataHashBytes, err := generichash.CryptoGenericHash(GenericHashBytes, []byte(data), hashKey)
-	if err != 0 {
-		return "", stacktrace.NewError("email hash failed")
-	}
-	result := base64.StdEncoding.EncodeToString(dataHashBytes)
-	nativeResult, nativeErr := GetHashNative(data, hashKey)
-	if nativeErr != nil {
-		logrus.WithField("op", "crypto_compare").WithError(nativeErr).Error("native hash failed")
-		return "", stacktrace.Propagate(nativeErr, "native hash failed")
-	} else if nativeResult != result {
-		logrus.WithField("op", "crypto_compare").Error("hash mismatch between libsodium and native implementation")
-		return "", stacktrace.NewError("hash mismatch")
-	}
-	return nativeResult, nil
+
+	hash.Write([]byte(data))
+	hashBytes := hash.Sum(nil)
+
+	return base64.StdEncoding.EncodeToString(hashBytes), nil
 }
 
+// Wire-compatible with libsodium's crypto_box_seal.
 func GetEncryptedToken(token string, publicKey string) (string, error) {
 	publicKeyBytes, err := base64.StdEncoding.DecodeString(publicKey)
 	if err != nil {
 		return "", stacktrace.Propagate(err, "")
 	}
+	if len(publicKeyBytes) != boxPublicKeyBytes {
+		return "", stacktrace.NewError("invalid public key length")
+	}
+
 	tokenBytes, err := base64.URLEncoding.DecodeString(token)
 	if err != nil {
 		return "", stacktrace.Propagate(err, "")
 	}
-	encryptedTokenBytes, errCode := cryptobox.CryptoBoxSeal(tokenBytes, publicKeyBytes)
-	if errCode != 0 {
-		return "", stacktrace.NewError("token encryption failed")
+
+	var recipientPublicKey [boxPublicKeyBytes]byte
+	copy(recipientPublicKey[:], publicKeyBytes)
+
+	ephemeralPublicKey, ephemeralPrivateKey, err := box.GenerateKey(rand.Reader)
+	if err != nil {
+		return "", stacktrace.Propagate(err, "failed to generate ephemeral keypair")
 	}
-	return base64.StdEncoding.EncodeToString(encryptedTokenBytes), nil
+
+	// crypto_box_seal derives the nonce from both public keys.
+	nonceInput := make([]byte, boxPublicKeyBytes*2)
+	copy(nonceInput[:boxPublicKeyBytes], ephemeralPublicKey[:])
+	copy(nonceInput[boxPublicKeyBytes:], recipientPublicKey[:])
+
+	hash, err := blake2b.New(boxNonceBytes, nil)
+	if err != nil {
+		return "", stacktrace.Propagate(err, "failed to create blake2b hasher")
+	}
+	hash.Write(nonceInput)
+	var nonce [boxNonceBytes]byte
+	copy(nonce[:], hash.Sum(nil))
+
+	// crypto_box_seal prefixes the ciphertext with the ephemeral public key.
+	out := make([]byte, boxPublicKeyBytes)
+	copy(out, ephemeralPublicKey[:])
+	encrypted := box.Seal(out, tokenBytes, &nonce, &recipientPublicKey, ephemeralPrivateKey)
+	return base64.StdEncoding.EncodeToString(encrypted), nil
+}
+
+func ValidateSealedBoxPublicKey(publicKey string) error {
+	_, err := decodeAndValidateSealedBoxPublicKey(publicKey)
+	return err
+}
+
+func decodeAndValidateSealedBoxPublicKey(publicKey string) ([]byte, error) {
+	publicKeyBytes, err := base64.StdEncoding.DecodeString(publicKey)
+	if err != nil {
+		return nil, stacktrace.Propagate(err, "failed to decode public key")
+	}
+	if len(publicKeyBytes) != boxPublicKeyBytes {
+		return nil, stacktrace.NewError("invalid public key length")
+	}
+
+	// Reject low-order/non-contributory points so hostile clients cannot upload
+	// a public key that collapses challenge encryption onto a trivial secret.
+	probeScalar, err := hex.DecodeString("a5465c1d0f3f1e0d49f5cf0a5dbf3d74b2c1f5d9a604de884812a4ccf4a4c5f0")
+	if err != nil {
+		return nil, stacktrace.Propagate(err, "failed to initialize box public key validator")
+	}
+	if _, err := curve25519.X25519(probeScalar, publicKeyBytes); err != nil {
+		return nil, stacktrace.Propagate(err, "invalid box public key")
+	}
+	return publicKeyBytes, nil
 }
