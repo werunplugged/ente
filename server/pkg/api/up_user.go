@@ -45,8 +45,8 @@ func (h *UPUserHandler) VerifyEmail(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
-// ChangeEmail accepts the OTT for either the bare UP username or
-// <username>@<unplugged.email-host>.
+// ChangeEmail accepts a bare UP username or a full email. A UP account can
+// only be set to its own <username>@<unplugged.email-host>.
 func (h *UPUserHandler) ChangeEmail(c *gin.Context) {
 	var request ente.EmailVerificationRequest
 	if err := handler.BindJSON(c, &request); err != nil {

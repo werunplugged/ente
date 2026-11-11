@@ -46,6 +46,47 @@ func UPUsernameFromEmail(email string) (string, bool) {
 	return username, true
 }
 
+// UPChangeEmailTarget returns the email a change-email request may set on an
+// account, given the account's current email and the requested one (both
+// already normalized). A requested value without "@" is read as a UP username.
+//
+// The email of a UP account is its identity key, so such an account may only
+// be set to the canonical UPEmail of its own username. That is a real change
+// only for legacy accounts stored under the bare username. Any other account
+// keeps Ente's behaviour but may not take a UP email, which would claim a UP
+// identity without a UP access token.
+func UPChangeEmailTarget(current, requested string) (string, error) {
+	target := requested
+	if !strings.Contains(target, "@") {
+		upEmail, err := UPEmail(target)
+		if err != nil {
+			return "", err
+		}
+		target = upEmail
+	}
+	_, targetIsUP := UPUsernameFromEmail(target)
+
+	username, currentIsUP := UPUsernameFromEmail(current)
+	if !strings.Contains(current, "@") {
+		// Legacy UP account stored under the bare username.
+		username, currentIsUP = current, true
+	}
+	if !currentIsUP {
+		if targetIsUP {
+			return "", stacktrace.Propagate(ente.ErrPermissionDenied, "a UP email can only be set through UP sign-in")
+		}
+		return target, nil
+	}
+	canonical, err := UPEmail(username)
+	if err != nil {
+		return "", err
+	}
+	if target != canonical {
+		return "", stacktrace.Propagate(ente.ErrPermissionDenied, "the email of a UP account cannot be changed")
+	}
+	return target, nil
+}
+
 // GetUserID resolves a UP username to the museum user whose email is
 // UPEmail(upUsername), returning that user's ID and email. It returns
 // ente.ErrBadRequest for an invalid username and ente.ErrNotFound when no such

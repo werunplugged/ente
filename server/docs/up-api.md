@@ -211,7 +211,7 @@ Response 200: `{}`.
 |---|---|
 | `POST /users/verify-email` | `email` in the body is the **bare username**. The server appends `@<unplugged.email-host>` before verifying the OTT. |
 | `GET /users/srp/attributes?email=` | `email` may be a UP username. If it resolves to an account, that account's email is used. Otherwise the value is passed through unchanged, so plain emails still work. |
-| `POST /users/change-email` (Ente token) | The OTT is accepted for either the bare username or `<username>@<email-host>`. **Known issue:** the account email is saved as the bare username, and `GetUserID` cannot resolve such accounts. Tracked on PR #58. |
+| `POST /users/change-email` (Ente token) | `email` may be a bare username (read as `<username>@<email-host>`) or a full email; the OTT must be for the resulting email. A UP account (email `<username>@<email-host>`, or a legacy bare `<username>`) can only be set to its own `<username>@<email-host>`; anything else returns 403. Other accounts keep Ente's behaviour but cannot take an `@<email-host>` email. |
 
 ## Subscription sync
 
