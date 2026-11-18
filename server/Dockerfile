@@ -12,6 +12,9 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
   go build -trimpath -o museum cmd/museum/main.go
 
 FROM alpine:3.22
+# UP-only: pull the latest Alpine security fixes (zlib CVE-2026-4738) instead of
+# waiting for a new base image.
+RUN apk upgrade --no-cache
 COPY --from=builder /etc/ente/museum .
 COPY configurations configurations
 COPY migrations migrations
