@@ -6,11 +6,10 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/ente-io/stacktrace"
-	log "github.com/sirupsen/logrus"
+	"github.com/ente/stacktrace"
 
-	"github.com/ente-io/museum/ente"
-	"github.com/ente-io/museum/pkg/utils/time"
+	"github.com/ente/museum/ente"
+	"github.com/ente/museum/pkg/utils/time"
 )
 
 // ObjectCleanupRepository maintains state related to objects that might need to
@@ -22,26 +21,32 @@ type ObjectCleanupRepository struct {
 	DB *sql.DB
 }
 
-// AddTempObject persists a given object identifier and it's expirationTime
 func (repo *ObjectCleanupRepository) AddTempObject(tempObject ente.TempObject, expirationTime int64) error {
-	var err error
-	if tempObject.IsMultipart {
-		_, err = repo.DB.Exec(`INSERT INTO temp_objects(object_key, expiration_time,upload_id,is_multipart, bucket_id)
-		VALUES($1, $2, $3, $4, $5)`, tempObject.ObjectKey, expirationTime, tempObject.UploadID, tempObject.IsMultipart, tempObject.BucketId)
-	} else {
-		_, err = repo.DB.Exec(`INSERT INTO temp_objects(object_key, expiration_time, bucket_id)
-		VALUES($1, $2, $3)`, tempObject.ObjectKey, expirationTime, tempObject.BucketId)
-	}
+	_, err := repo.DB.Exec(`
+		INSERT INTO temp_objects (
+		    object_key, expiration_time, upload_id, is_multipart, bucket_id,
+		    user_id, app, purpose, content_length, content_md5, client
+		) VALUES ($1, $2, NULLIF($3, ''), $4, $5, NULLIF($6::BIGINT, 0), NULLIF($7, ''), NULLIF($8, ''), $9, $10, NULLIF($11, ''))`,
+		tempObject.ObjectKey, expirationTime, tempObject.UploadID, tempObject.IsMultipart, tempObject.BucketId,
+		tempObject.UserID, tempObject.App, tempObject.Purpose, tempObject.ContentLength, tempObject.ContentMD5, tempObject.Client)
 	return stacktrace.Propagate(err, "")
 }
 
-// RemoveTempObjectKey removes a TempObject identified by its key and datacenter
 func (repo *ObjectCleanupRepository) RemoveTempObjectKey(ctx context.Context, tx *sql.Tx, objectKey string, dc string) error {
-	_, err := tx.ExecContext(ctx, `DELETE FROM temp_objects WHERE object_key = $1`, objectKey)
-	return stacktrace.Propagate(err, "")
+	res, err := tx.ExecContext(ctx, `DELETE FROM temp_objects WHERE object_key = $1`, objectKey)
+	if err != nil {
+		return stacktrace.Propagate(err, "")
+	}
+	rowsAffected, err := res.RowsAffected()
+	if err != nil {
+		return stacktrace.Propagate(err, "")
+	}
+	if rowsAffected != 1 {
+		return stacktrace.Propagate(ente.NewBadRequestWithMessage("staged upload not found"), "")
+	}
+	return nil
 }
 
-// RemoveTempObjectFromDC will also return how many rows were affected
 func (repo *ObjectCleanupRepository) RemoveTempObjectFromDC(ctx context.Context, tx *sql.Tx, objectKey string, dc string) error {
 	res, err := tx.ExecContext(ctx, `DELETE FROM temp_objects WHERE object_key = $1 and bucket_id = $2`, objectKey, dc)
 	if err != nil {
@@ -70,26 +75,18 @@ func (repo *ObjectCleanupRepository) DoesTempObjectExist(ctx context.Context, ob
 	return exists, nil
 }
 
-// GetExpiredObjects returns the list of object keys that have expired
 func (repo *ObjectCleanupRepository) GetAndLockExpiredObjects() (*sql.Tx, []ente.TempObject, error) {
 	tx, err := repo.DB.Begin()
 	if err != nil {
 		return nil, nil, stacktrace.Propagate(err, "")
 	}
 
-	rollback := func() {
-		rerr := tx.Rollback()
-		if rerr != nil {
-			log.Errorf("Ignoring error when rolling back transaction: %s", rerr)
+	transferred := false
+	defer func() {
+		if !transferred {
+			_ = tx.Rollback()
 		}
-	}
-
-	commit := func() {
-		cerr := tx.Commit()
-		if cerr != nil {
-			log.Errorf("Ignoring error when committing transaction: %s", cerr)
-		}
-	}
+	}()
 
 	rows, err := tx.Query(`
 	SELECT object_key, is_multipart, upload_id, bucket_id FROM temp_objects
@@ -98,13 +95,7 @@ func (repo *ObjectCleanupRepository) GetAndLockExpiredObjects() (*sql.Tx, []ente
 	FOR UPDATE SKIP LOCKED
 	`, time.Microseconds())
 
-	if err != nil && errors.Is(err, sql.ErrNoRows) {
-		commit()
-		return nil, nil, err
-	}
-
 	if err != nil {
-		rollback()
 		return nil, nil, stacktrace.Propagate(err, "")
 	}
 
@@ -116,7 +107,6 @@ func (repo *ObjectCleanupRepository) GetAndLockExpiredObjects() (*sql.Tx, []ente
 		var bucketID sql.NullString
 		err := rows.Scan(&tempObject.ObjectKey, &tempObject.IsMultipart, &uploadID, &bucketID)
 		if err != nil {
-			rollback()
 			return nil, nil, stacktrace.Propagate(err, "")
 		}
 		if tempObject.IsMultipart {
@@ -127,10 +117,13 @@ func (repo *ObjectCleanupRepository) GetAndLockExpiredObjects() (*sql.Tx, []ente
 		}
 		tempObjects = append(tempObjects, tempObject)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, nil, stacktrace.Propagate(err, "")
+	}
+	transferred = true
 	return tx, tempObjects, nil
 }
 
-// SetExpiryForTempObject sets the expiration_time for TempObject
 func (repo *ObjectCleanupRepository) SetExpiryForTempObject(tx *sql.Tx, tempObject ente.TempObject, expirationTime int64) error {
 	if tempObject.IsMultipart {
 		_, err := tx.Exec(`
@@ -145,7 +138,6 @@ func (repo *ObjectCleanupRepository) SetExpiryForTempObject(tx *sql.Tx, tempObje
 	}
 }
 
-// RemoveTempObject removes a given TempObject
 func (repo *ObjectCleanupRepository) RemoveTempObject(tx *sql.Tx, tempObject ente.TempObject) error {
 	if tempObject.IsMultipart {
 		_, err := tx.Exec(`

@@ -1,13 +1,15 @@
 package user
 
 import (
+	"database/sql"
 	"encoding/base64"
+	"errors"
 
-	"github.com/ente-io/museum/ente"
-	enteJWT "github.com/ente-io/museum/ente/jwt"
-	"github.com/ente-io/museum/pkg/utils/auth"
-	"github.com/ente-io/museum/pkg/utils/crypto"
-	"github.com/ente-io/stacktrace"
+	"github.com/ente/museum/ente"
+	enteJWT "github.com/ente/museum/ente/jwt"
+	"github.com/ente/museum/pkg/utils/auth"
+	"github.com/ente/museum/pkg/utils/crypto"
+	"github.com/ente/stacktrace"
 	"github.com/gin-contrib/requestid"
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
@@ -31,13 +33,13 @@ func (c *UserController) GetDeleteChallengeToken(ctx *gin.Context) (*ente.Delete
 	})
 	logger.Info("User initiated self-delete")
 	subscription, err := c.BillingController.GetSubscription(ctx, userID)
-	if err != nil {
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return nil, stacktrace.Propagate(err, "")
 	}
 	/* todo: add check to see if there's pending abuse report or if user's master password
 	was changed in last X days.
 	*/
-	shouldNotifyDiscord := subscription.ProductID != ente.FreePlanProductID
+	shouldNotifyDiscord := err == nil && subscription.ProductID != ente.FreePlanProductID
 	if shouldNotifyDiscord {
 		go c.DiscordController.NotifyAccountDelete(user.ID, string(subscription.PaymentProvider), subscription.ProductID)
 	}
@@ -45,7 +47,7 @@ func (c *UserController) GetDeleteChallengeToken(ctx *gin.Context) (*ente.Delete
 	if err != nil {
 		return nil, stacktrace.Propagate(err, "")
 	}
-	encryptedToken, err := crypto.GetEncryptedTokenNative(base64.StdEncoding.EncodeToString([]byte(token)), keyAttributes.PublicKey)
+	encryptedToken, err := crypto.GetEncryptedToken(base64.StdEncoding.EncodeToString([]byte(token)), keyAttributes.PublicKey)
 	if err != nil {
 		return nil, stacktrace.Propagate(err, "")
 	}
@@ -75,7 +77,7 @@ func (c *UserController) SelfDeleteAccount(ctx *gin.Context, req ente.DeleteAcco
 		return nil, stacktrace.Propagate(err, "")
 	}
 	_, err = c.BillingController.GetSubscription(ctx, userID)
-	if err != nil {
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return nil, stacktrace.Propagate(err, "")
 	}
 	logger := logrus.WithFields(logrus.Fields{
@@ -88,7 +90,6 @@ func (c *UserController) SelfDeleteAccount(ctx *gin.Context, req ente.DeleteAcco
 	if err != nil {
 		return nil, stacktrace.Propagate(err, "")
 	}
-	// Update reason, ignore failure in updating reason
 	updateErr := c.UserRepo.UpdateDeleteFeedback(userID, req.GetReasonAttr())
 	if updateErr != nil {
 		logger.WithError(updateErr).Error("failed to update delete feedback")

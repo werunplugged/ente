@@ -5,12 +5,11 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"github.com/ente-io/museum/ente"
-	"github.com/ente-io/stacktrace"
+	"github.com/ente/museum/ente"
+	"github.com/ente/stacktrace"
 	"github.com/sirupsen/logrus"
 )
 
-// LeaveFamily removes the actor user from the family in which the user belongs to.
 func (c *Controller) LeaveFamily(ctx context.Context, userID int64) error {
 	user, err := c.UserRepo.Get(userID)
 	if err != nil {
@@ -18,7 +17,6 @@ func (c *Controller) LeaveFamily(ctx context.Context, userID int64) error {
 	}
 	if user.FamilyAdminID == nil {
 		logrus.WithField("user_id", userID).Info("not part of any family group")
-		// user has either not joined any group or already left it.
 		return nil
 	}
 	if *user.FamilyAdminID == userID {
@@ -26,6 +24,9 @@ func (c *Controller) LeaveFamily(ctx context.Context, userID int64) error {
 	}
 	err = c.FamilyRepo.RemoveMember(ctx, *user.FamilyAdminID, userID, ente.LEFT)
 	if err != nil {
+		return stacktrace.Propagate(err, "")
+	}
+	if err = c.clearFamilyCustomDomain(ctx, userID); err != nil {
 		return stacktrace.Propagate(err, "")
 	}
 	go func() {
@@ -37,7 +38,6 @@ func (c *Controller) LeaveFamily(ctx context.Context, userID int64) error {
 	return nil
 }
 
-// InviteInfo return basic information about the invite
 func (c *Controller) InviteInfo(ctx context.Context, token string) (ente.InviteInfoResponse, error) {
 	familyMember, err := c.FamilyRepo.GetInvite(token)
 	if err != nil && errors.Is(err, sql.ErrNoRows) {
@@ -54,7 +54,6 @@ func (c *Controller) InviteInfo(ctx context.Context, token string) (ente.InviteI
 		return ente.InviteInfoResponse{}, stacktrace.Propagate(err, "failed to fetch user")
 
 	}
-	// verify that the invitor is still an admin
 	if adminUser.FamilyAdminID == nil || *adminUser.FamilyAdminID != adminUser.ID {
 		return ente.InviteInfoResponse{}, stacktrace.Propagate(fmt.Errorf("inviter is no longer a admin of family plam "), "")
 	}
@@ -64,7 +63,6 @@ func (c *Controller) InviteInfo(ctx context.Context, token string) (ente.InviteI
 	}, nil
 }
 
-// AcceptInvite accepts a family invite as long as it's in invited state.
 func (c *Controller) AcceptInvite(ctx context.Context, token string) (ente.AcceptInviteResponse, error) {
 	familyMember, err := c.FamilyRepo.GetInvite(token)
 	if err != nil {
@@ -74,14 +72,11 @@ func (c *Controller) AcceptInvite(ctx context.Context, token string) (ente.Accep
 	if err != nil {
 		return ente.AcceptInviteResponse{}, stacktrace.Propagate(err, "failed to fetch user")
 	}
-	// verify that the invitor is still an admin
 	if adminUser.FamilyAdminID == nil || *adminUser.FamilyAdminID != adminUser.ID {
 		return ente.AcceptInviteResponse{}, stacktrace.Propagate(fmt.Errorf("inviter is no longer a admin of family plam "), "")
 	}
 
-	// Accept invitation and notify admin if it's not accepted already
 	if familyMember.Status != ente.ACCEPTED {
-		// if the state is invited, accept the invitation and send email notification to the admin.
 		if familyMember.Status == ente.INVITED {
 			err = c.FamilyRepo.AcceptInvite(ctx, familyMember.AdminUserID, familyMember.MemberUserID, token)
 			if err != nil {

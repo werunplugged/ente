@@ -2,13 +2,14 @@ package user
 
 import (
 	"errors"
-	"github.com/ente-io/museum/ente"
-	"github.com/ente-io/museum/ente/details"
-	bonus "github.com/ente-io/museum/ente/storagebonus"
-	"github.com/ente-io/museum/pkg/utils/billing"
-	"github.com/ente-io/museum/pkg/utils/recover"
-	"github.com/ente-io/museum/pkg/utils/time"
-	"github.com/ente-io/stacktrace"
+	"github.com/ente/museum/ente"
+	"github.com/ente/museum/ente/details"
+	bonus "github.com/ente/museum/ente/storagebonus"
+	"github.com/ente/museum/pkg/repo"
+	"github.com/ente/museum/pkg/utils/billing"
+	"github.com/ente/museum/pkg/utils/recover"
+	"github.com/ente/museum/pkg/utils/time"
+	"github.com/ente/stacktrace"
 	"github.com/gin-gonic/gin"
 	"golang.org/x/sync/errgroup"
 )
@@ -31,6 +32,7 @@ func (c *UserController) GetDetailsV2(ctx *gin.Context, userID int64, fetchMemor
 	var passkeyCount int64
 	var fileCount, sharedCollectionCount, usage int64
 	var bonus *bonus.ActiveStorageBonus
+	var lockerUsage *repo.LockerUsage
 	g.Go(func() error {
 		resp, err := c.GetUser(userID)
 		if err != nil {
@@ -38,6 +40,7 @@ func (c *UserController) GetDetailsV2(ctx *gin.Context, userID int64, fetchMemor
 		}
 		user = &resp
 		bonusUserId := userID
+		var subscriptionUserIDs []int64
 		if user.FamilyAdminID != nil {
 			bonusUserId = *user.FamilyAdminID
 			familyDataResp, familyErr := c.FamilyController.FetchMembersForAdminID(ctx, *user.FamilyAdminID)
@@ -45,10 +48,24 @@ func (c *UserController) GetDetailsV2(ctx *gin.Context, userID int64, fetchMemor
 				return stacktrace.Propagate(familyErr, "")
 			}
 			familyData = &familyDataResp
+			for _, familyMember := range familyData.Members {
+				subscriptionUserIDs = append(subscriptionUserIDs, familyMember.MemberUserID)
+			}
+		} else {
+			subscriptionUserIDs = []int64{userID}
 		}
 		bonusValue, bonusErr := c.UserCacheController.GetActiveStorageBonus(ctx, bonusUserId)
 		if bonusErr != nil {
 			return stacktrace.Propagate(bonusErr, "failed to fetch storage bonus")
+		}
+		switch app {
+		case ente.Locker:
+			lockerUsage, err = c.UsageRepo.GetLockerUsage(ctx, subscriptionUserIDs)
+		case ente.Photos:
+			lockerUsage, err = c.UsageRepo.GetLockerStorageUsage(ctx, subscriptionUserIDs)
+		}
+		if err != nil {
+			return stacktrace.Propagate(err, "failed to fetch locker usage")
 		}
 		bonus = bonusValue
 		return nil
@@ -72,7 +89,7 @@ func (c *UserController) GetDetailsV2(ctx *gin.Context, userID int64, fetchMemor
 	})
 
 	g.Go(func() error {
-		return recover.Int64ToInt64RecoverWrapper(userID, c.FileRepo.GetUsage, &usage)
+		return recover.Int64ToInt64RecoverWrapper(userID, c.UsageRepo.GetUsage, &usage)
 	})
 	g.Go(func() error {
 		cnt, err := c.PasskeyRepo.GetPasskeyCount(userID)
@@ -94,9 +111,6 @@ func (c *UserController) GetDetailsV2(ctx *gin.Context, userID int64, fetchMemor
 		})
 	}
 
-	// g.Wait waits for all goroutines to complete
-	// and returns the first non-nil error returned
-	// by one of the goroutines.
 	if err := g.Wait(); err != nil {
 		return details.UserDetailsResponse{}, stacktrace.Propagate(err, "")
 	}
@@ -135,5 +149,28 @@ func (c *UserController) GetDetailsV2(ctx *gin.Context, userID int64, fetchMemor
 		// Note: SharedCollectionsCount is deprecated. Returning default value as 0
 		result.SharedCollectionsCount = &sharedCollectionCount
 	}
+	if lockerUsage != nil {
+		for _, userLockerUsage := range lockerUsage.Users {
+			if userLockerUsage.UserID == userID {
+				result.Usage -= userLockerUsage.Usage
+			}
+		}
+		if familyData != nil {
+			for _, member := range familyData.Members {
+				for _, userLockerUsage := range lockerUsage.Users {
+					if userLockerUsage.UserID == member.MemberUserID {
+						result.Usage -= userLockerUsage.Usage
+					}
+				}
+			}
+			result.FamilyData = familyData
+		}
+		if app == ente.Locker {
+			result.LockerFamilyUsage = &details.LockerFamilyUsage{
+				FamilyFileCount: lockerUsage.TotalFileCount,
+			}
+		}
+	}
+
 	return result, nil
 }

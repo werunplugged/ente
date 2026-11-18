@@ -2,10 +2,12 @@ package ente
 
 import (
 	"fmt"
-	"github.com/ente-io/stacktrace"
-	"golang.org/x/net/idna"
 	"regexp"
+	"strconv"
 	"strings"
+
+	"github.com/ente/stacktrace"
+	"golang.org/x/net/idna"
 )
 
 type GetValueRequest struct {
@@ -29,8 +31,7 @@ type AdminUpdateKeyValueRequest struct {
 }
 
 type FeatureFlagResponse struct {
-	EnableStripe bool `json:"enableStripe"`
-	// If true, the mobile client will stop using CF worker to download files
+	EnableStripe        bool    `json:"enableStripe"`
 	DisableCFWorker     bool    `json:"disableCFWorker"`
 	MapEnabled          bool    `json:"mapEnabled"`
 	FaceSearchEnabled   bool    `json:"faceSearchEnabled"`
@@ -39,11 +40,26 @@ type FeatureFlagResponse struct {
 	InternalUser        bool    `json:"internalUser"`
 	BetaUser            bool    `json:"betaUser"`
 	EnableMobMultiPart  bool    `json:"enableMobMultiPart"`
+	ServerApiFlag       int64   `json:"serverApiFlag"`
 	CastUrl             string  `json:"castUrl"`
 	EmbedUrl            string  `json:"embedUrl"`
 	CustomDomain        *string `json:"customDomain,omitempty"`
 	CustomDomainCNAME   string  `json:"customDomainCNAME,omitempty"`
 }
+
+const (
+	UploadV2       int64 = 1 << 0
+	Comments       int64 = 1 << 1
+	BackupOptions  int64 = 1 << 2
+	VideoStreaming int64 = 1 << 3
+	// 1 << 4 previously gated CastSessionsV2 for released clients. Reuse it
+	// only when those clients no longer need to be isolated from a new flag.
+	// CastSessionsV2 gates cast sessions v2 support.
+	CastSessionsV2             int64 = 1 << 5
+	DeferredMultipartChecksums int64 = 1 << 6
+	LibrarySharing             int64 = 1 << 7
+	PreviewUploadV2            int64 = 1 << 8
+)
 
 type FlagKey string
 
@@ -76,7 +92,6 @@ func (k FlagKey) String() string {
 	return string(k)
 }
 
-// UserEditable returns true if the key is user editable
 func (k FlagKey) UserEditable() bool {
 	switch k {
 	case RecoveryKeyVerified, MapEnabled, FaceSearchEnabled, PassKeyEnabled, CustomDomain:
@@ -87,7 +102,7 @@ func (k FlagKey) UserEditable() bool {
 }
 
 func (k FlagKey) NeedSubscription() bool {
-	return k == CustomDomain
+	return false
 }
 
 func (k FlagKey) CanRemove() bool {
@@ -112,7 +127,7 @@ func (k FlagKey) IsBoolType() bool {
 	case CustomDomain:
 		return false
 	default:
-		return false // Explicitly handle unexpected cases
+		return false
 	}
 }
 
@@ -121,14 +136,67 @@ func (k FlagKey) IsValidValue(value string) error {
 		return stacktrace.Propagate(NewBadRequestWithMessage(fmt.Sprintf("value %s is not allowed", value)), "value not allowed")
 	}
 	if k == CustomDomain && value != "" {
-		if err := isValidDomainWithoutScheme(value); err != nil {
+		if _, _, isPointer, err := ParseFamilyCustomDomainPointer(value); err != nil {
 			return stacktrace.Propagate(err, "invalid custom domain")
+		} else if !isPointer {
+			if err := isValidDomainWithoutScheme(value); err != nil {
+				return stacktrace.Propagate(err, "invalid custom domain")
+			}
 		}
 	}
 	return nil
 }
 
 var domainRegex = regexp.MustCompile(`^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$`)
+
+func ValidatePublicCustomDomain(value string) error {
+	return isValidDomainWithoutScheme(value)
+}
+
+const customDomainFamilyPrefix = "_"
+
+func BuildFamilyCustomDomainPointer(memberID int64, domain string) string {
+	return fmt.Sprintf("%s%d:%s", customDomainFamilyPrefix, memberID, domain)
+}
+
+func ParseFamilyCustomDomainPointer(value string) (int64, string, bool, error) {
+	if !strings.HasPrefix(value, customDomainFamilyPrefix) {
+		return 0, "", false, nil
+	}
+	trimmed := strings.TrimPrefix(value, customDomainFamilyPrefix)
+	parts := strings.SplitN(trimmed, ":", 2)
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return 0, "", true, NewBadRequestWithMessage("invalid family custom domain format")
+	}
+	memberID, err := strconv.ParseInt(parts[0], 10, 64)
+	if err != nil || memberID <= 0 {
+		return 0, "", true, NewBadRequestWithMessage("invalid family custom domain user id")
+	}
+	domain := parts[1]
+	if err := isValidDomainWithoutScheme(domain); err != nil {
+		return 0, "", true, err
+	}
+	return memberID, domain, true, nil
+}
+
+func ResolveCustomDomainValue(value string) (string, error) {
+	if value == "" {
+		return "", nil
+	}
+	_, domain, isPointer, err := ParseFamilyCustomDomainPointer(value)
+	if err != nil {
+		return "", err
+	}
+	if isPointer {
+		return domain, nil
+	}
+	return value, nil
+}
+
+func CanonicalDomain(domain string) (string, error) {
+	asciiDomain, err := idna.Lookup.ToASCII(domain)
+	return strings.ToLower(asciiDomain), err
+}
 
 func isValidDomainWithoutScheme(input string) error {
 	trimmed := strings.TrimSpace(input)
@@ -142,13 +210,11 @@ func isValidDomainWithoutScheme(input string) error {
 		return NewBadRequestWithMessage("domain should not contain scheme (e.g., http:// or https://)")
 	}
 
-	// Convert IDN to ASCII (Punycode) for validation
-	asciiDomain, err := idna.ToASCII(trimmed)
+	asciiDomain, err := CanonicalDomain(trimmed)
 	if err != nil {
 		return NewBadRequestWithMessage(fmt.Sprintf("invalid idn domain format: %s", trimmed))
 	}
 
-	// Validate the ASCII version
 	if !domainRegex.MatchString(asciiDomain) {
 		return NewBadRequestWithMessage(fmt.Sprintf("invalid domain format: %s", trimmed))
 	}
