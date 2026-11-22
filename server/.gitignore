@@ -1,19 +1,15 @@
-data/**
-.DS_Store
-Photos.code-workspace
-logs/**
-.idea/**
-.vscode/**
-tmp/**
-museum.yaml
-bin/**
 data/
+logs/
+tmp/
+museum.yaml
+bin/
 my-ente/
 __debug_bin*
 config/.env
-config/museum.yaml
-main
-credentials
+/main
+/museum
+credentials/
+# UP
 Dockerfile.debug
 compose-debug.yaml
 configurations

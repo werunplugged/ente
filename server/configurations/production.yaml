@@ -7,6 +7,8 @@ stripe:
     path:
         success: ?status=success&session_id={CHECKOUT_SESSION_ID}
         cancel: ?status=fail&reason=canceled
+
+# UP
 unplugged:
     inner-api-host: http://subscription.up-service.svc.cluster.local:8080
     email-host: msg.unpluggedsystems.app

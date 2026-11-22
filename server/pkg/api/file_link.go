@@ -1,19 +1,18 @@
 package api
 
 import (
-	"github.com/ente-io/museum/ente"
-	"github.com/ente-io/museum/pkg/utils/auth"
-	"github.com/ente-io/museum/pkg/utils/handler"
-	"github.com/ente-io/stacktrace"
+	"github.com/ente/museum/ente"
+	"github.com/ente/museum/pkg/utils/auth"
+	"github.com/ente/museum/pkg/utils/handler"
+	"github.com/ente/stacktrace"
 	"github.com/gin-gonic/gin"
 	"net/http"
 	"strconv"
 )
 
-// ShareUrl a sharable url for the file
 func (h *FileHandler) ShareUrl(c *gin.Context) {
 	var file ente.CreateFileUrl
-	if err := c.ShouldBindJSON(&file); err != nil {
+	if err := handler.BindJSON(c, &file); err != nil {
 		handler.Error(c, stacktrace.Propagate(err, ""))
 		return
 	}
@@ -27,14 +26,23 @@ func (h *FileHandler) ShareUrl(c *gin.Context) {
 }
 
 func (h *FileHandler) LinkInfo(c *gin.Context) {
-	resp, err := h.FileUrlCtrl.Info(c)
+	fileResp, linkMeta, err := h.FileUrlCtrl.Info(c)
 	if err != nil {
 		handler.Error(c, stacktrace.Propagate(err, ""))
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{
-		"file": resp,
-	})
+	response := gin.H{
+		"file": fileResp,
+	}
+	if linkMeta != nil {
+		response["link"] = linkMeta
+	}
+	if linkDeviceToken, ok := c.Get(auth.LinkDeviceTokenResponseKey); ok {
+		if token, ok := linkDeviceToken.(string); ok && token != "" {
+			c.Header(auth.LinkDeviceTokenResponseHeader, token)
+		}
+	}
+	c.JSON(http.StatusOK, response)
 }
 
 func (h *FileHandler) PasswordInfo(c *gin.Context) {
@@ -52,7 +60,7 @@ func (h *FileHandler) PasswordInfo(c *gin.Context) {
 
 func (h *FileHandler) LinkThumbnail(c *gin.Context) {
 	linkCtx := auth.MustGetFileLinkAccessContext(c)
-	url, err := h.Controller.GetThumbnailURL(c, linkCtx.OwnerID, linkCtx.FileID)
+	url, err := h.Controller.GetThumbnailURLForOwner(c, linkCtx.OwnerID, linkCtx.FileID)
 	if err != nil {
 		handler.Error(c, stacktrace.Propagate(err, ""))
 		return
@@ -62,12 +70,24 @@ func (h *FileHandler) LinkThumbnail(c *gin.Context) {
 
 func (h *FileHandler) LinkFile(c *gin.Context) {
 	linkCtx := auth.MustGetFileLinkAccessContext(c)
-	url, err := h.Controller.GetFileURL(c, linkCtx.OwnerID, linkCtx.FileID)
+	url, err := h.Controller.GetFileURLForOwner(c, linkCtx.OwnerID, linkCtx.FileID)
 	if err != nil {
 		handler.Error(c, stacktrace.Propagate(err, ""))
 		return
 	}
 	c.Redirect(http.StatusTemporaryRedirect, url)
+}
+
+func (h *FileHandler) LinkThumbnailURLV3(c *gin.Context) {
+	linkCtx := auth.MustGetFileLinkAccessContext(c)
+	url, err := h.Controller.GetThumbnailURLForOwner(c, linkCtx.OwnerID, linkCtx.FileID)
+	writeFileURLV3(c, url, err)
+}
+
+func (h *FileHandler) LinkFileURLV3(c *gin.Context) {
+	linkCtx := auth.MustGetFileLinkAccessContext(c)
+	url, err := h.Controller.GetFileURLForOwner(c, linkCtx.OwnerID, linkCtx.FileID)
+	writeFileURLV3(c, url, err)
 }
 
 func (h *FileHandler) DisableUrl(c *gin.Context) {
@@ -108,10 +128,9 @@ func (h *FileHandler) GetUrls(c *gin.Context) {
 	})
 }
 
-// VerifyPassword verifies the password for given link access token and return signed jwt token if it's valid
 func (h *FileHandler) VerifyPassword(c *gin.Context) {
 	var req ente.VerifyPasswordRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := handler.BindJSON(c, &req); err != nil {
 		handler.Error(c, stacktrace.Propagate(err, ""))
 		return
 	}
@@ -123,10 +142,9 @@ func (h *FileHandler) VerifyPassword(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
-// UpdateFileURL updates the share URL for a file
 func (h *FileHandler) UpdateFileURL(c *gin.Context) {
 	var req ente.UpdateFileUrl
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := handler.BindJSON(c, &req); err != nil {
 		handler.Error(c, stacktrace.Propagate(err, ""))
 		return
 	}
